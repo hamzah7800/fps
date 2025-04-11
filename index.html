@@ -1,142 +1,304 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FPS Game - Multiplayer</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    #menu {
-      position: absolute;
-      top: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
-      color: white;
-      font-size: 24px;
-      z-index: 10;
-    }
-    #menu button {
-      padding: 10px 20px;
-      font-size: 20px;
-      margin: 10px;
-      cursor: pointer;
-    }
-    #crosshair {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 10px;
-      height: 10px;
-      background: white;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 2;
-    }
-    .joystick {
-      position: absolute;
-      left: 20px;
-      bottom: 20px;
-      width: 100px;
-      height: 100px;
-      z-index: 2;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FPS Game - Multiplayer (Deadshoot Style)</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #222; /* Darker background for a "Deadshoot" feel */
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #menu {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: #eee; /* Lighter text */
+            font-size: 28px; /* Slightly larger */
+            z-index: 10;
+        }
+        #menu button {
+            padding: 15px 30px; /* Larger buttons */
+            font-size: 22px;
+            margin: 15px;
+            cursor: pointer;
+            background-color: #444; /* Darker button background */
+            color: #eee;
+            border: none;
+            border-radius: 5px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 12px;
+            height: 12px;
+            background: #eee; /* Lighter crosshair */
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+        .joystick {
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            width: 120px; /* Slightly larger joystick */
+            height: 120px;
+            z-index: 2;
+        }
+        #lobby {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 11;
+            display: none; /* Hidden by default */
+        }
+        #lobby h2 {
+            margin-top: 0;
+        }
+        #playerList {
+            list-style: none;
+            padding: 0;
+        }
+        #playerList li {
+            margin: 5px 0;
+        }
+        #startGameBtn {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
-  <div id="menu">
-    <button id="desktopBtn">Play on Desktop</button>
-    <button id="mobileBtn">Play on Mobile</button>
-  </div>
+    <div id="menu">
+        <button id="playBtn">Play Online</button>
+        </div>
 
-  <div id="crosshair"></div>
+    <div id="lobby">
+        <h2>Lobby</h2>
+        <ul id="playerList">
+            </ul>
+        <button id="startGameBtn" style="display: none;">Start Game</button>
+    </div>
 
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-  <script src="https://cdn.babylonjs.com/babylon.virtualJoystick.min.js"></script>
-  <script>
-    let gameStarted = false;
-    let isMobile = false;
+    <div id="crosshair"></div>
 
-    const canvas = document.createElement("canvas");
-    document.body.appendChild(canvas);
-    const engine = new BABYLON.Engine(canvas, true);
-    const scene = new BABYLON.Scene(engine);
+    <canvas id="gameCanvas"></canvas>
 
-    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.8, -5), scene);
-    camera.attachControl(canvas, true);
-    camera.speed = 0.25;
-    camera.inertia = 0.5;
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.babylonjs.com/babylon.virtualJoystick.min.js"></script>
+    <script>
+        let gameStarted = false;
+        let isMobile = false;
+        let engine;
+        let scene;
+        let camera;
+        let player;
+        let enemies = [];
+        let socket; // Placeholder for WebSocket connection
 
-    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
+        const menu = document.getElementById("menu");
+        const lobbyDiv = document.getElementById("lobby");
+        const playerList = document.getElementById("playerList");
+        const startGameBtn = document.getElementById("startGameBtn");
+        const gameCanvas = document.getElementById("gameCanvas");
 
-    // Start Game after menu selection
-    document.getElementById("desktopBtn").addEventListener("click", () => {
-      isMobile = false;
-      startGame();
-    });
+        // Function to connect to the WebSocket server
+        function connectToServer() {
+            // Replace 'ws://your-server-address:your-port' with your actual server address
+            socket = new WebSocket('ws://localhost:3000');
 
-    document.getElementById("mobileBtn").addEventListener("click", () => {
-      isMobile = true;
-      startGame();
-    });
+            socket.onopen = () => {
+                console.log("Connected to server");
+                menu.style.display = "none";
+                lobbyDiv.style.display = "block";
+                // Optionally, send a message to the server to join the lobby
+                socket.send(JSON.stringify({ type: 'joinLobby', playerName: 'Player-' + Math.floor(Math.random() * 1000) }));
+            };
 
-    // Function to start the game after menu selection
-    function startGame() {
-      document.getElementById("menu").style.display = "none"; // Hide the menu
-      gameStarted = true;
-      setupGame();
-    }
+            socket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                console.log("Received message:", message);
 
-    // Function to setup the game
-    function setupGame() {
-      if (isMobile) {
-        // Setup virtual joystick for mobile
-        const joystick = new BABYLON.VirtualJoystick(true, canvas);
-        joystick.attachControl(canvas, true);
+                switch (message.type) {
+                    case 'playerListUpdate':
+                        updatePlayerList(message.players);
+                        break;
+                    case 'startGame':
+                        startGame(message.gameData);
+                        break;
+                    case 'playerJoined':
+                        displayMessage(message.playerName + ' joined the lobby.');
+                        break;
+                    case 'playerLeft':
+                        displayMessage(message.playerName + ' left the lobby.');
+                        break;
+                    // Handle other game-related messages (player updates, enemy positions, etc.)
+                }
+            };
 
-        camera.inputs.clear(); // Remove default control (keyboard/mouse)
-        camera.inputs.add(joystick);
-      } else {
-        // Use default control for desktop (keyboard/mouse)
-        camera.inputs.clear();
-        camera.attachControl(canvas, true);
-      }
+            socket.onclose = () => {
+                console.log("Disconnected from server");
+                menu.style.display = "block";
+                lobbyDiv.style.display = "none";
+                // Optionally, try to reconnect after a delay
+            };
 
-      // Example of creating a simple enemy and skin setup
-      const enemy = BABYLON.MeshBuilder.CreateBox("enemy", { height: 1.8, width: 0.8, depth: 0.5 }, scene);
-      enemy.position = new BABYLON.Vector3(5, 0.9, 10);
-      enemy.material = new BABYLON.StandardMaterial("enemyMat", scene);
-      enemy.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
-
-      // Setup player skin (can be changed based on selection)
-      const player = BABYLON.MeshBuilder.CreateBox("player", { height: 1.8, width: 0.8, depth: 0.5 }, scene);
-      player.position = new BABYLON.Vector3(0, 0.9, 0);
-      player.material = new BABYLON.StandardMaterial("playerMat", scene);
-      player.material.diffuseColor = new BABYLON.Color3(0, 1, 0); // Green skin as example
-
-      // Matchmaking and multiplayer logic goes here (e.g., using Colyseus or Photon)
-
-      // Game loop
-      engine.runRenderLoop(() => {
-        if (gameStarted) {
-          scene.render();
+            socket.onerror = (error) => {
+                console.error("WebSocket error:", error);
+            };
         }
-      });
 
-      window.addEventListener("resize", () => engine.resize());
-    }
-  </script>
+        function updatePlayerList(players) {
+            playerList.innerHTML = '';
+            players.forEach(playerInfo => {
+                const li = document.createElement('li');
+                li.textContent = playerInfo.name;
+                playerList.appendChild(li);
+            });
+
+            // Only show the start game button if you are the host (this logic needs to be implemented on the server)
+            if (players.length > 1) {
+                startGameBtn.style.display = 'block';
+            } else {
+                startGameBtn.style.display = 'none';
+            }
+        }
+
+        function displayMessage(messageText) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = messageText;
+            lobbyDiv.appendChild(messageElement);
+            setTimeout(() => {
+                lobbyDiv.removeChild(messageElement);
+            }, 3000);
+        }
+
+        document.getElementById("playBtn").addEventListener("click", () => {
+            connectToServer();
+        });
+
+        startGameBtn.addEventListener("click", () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'requestStartGame' }));
+            }
+        });
+
+        // Function to start the game after receiving the 'startGame' message
+        function startGame(gameData) {
+            lobbyDiv.style.display = "none";
+            gameStarted = true;
+            setupGame();
+            // Process initial game data (e.g., player positions, initial enemy setup)
+            console.log("Game started with data:", gameData);
+        }
+
+        // Function to setup the game scene
+        function setupGame() {
+            engine = new BABYLON.Engine(gameCanvas, true);
+            scene = new BABYLON.Scene(engine);
+
+            camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.8, -5), scene);
+            camera.attachControl(gameCanvas, true);
+            camera.speed = 0.25;
+            camera.inertia = 0.5;
+
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
+
+            if (isMobile) {
+                // Setup virtual joystick for mobile
+                const joystick = new BABYLON.VirtualJoystick(true, gameCanvas);
+                joystick.attachControl(gameCanvas, true);
+
+                camera.inputs.clear(); // Remove default control (keyboard/mouse)
+                camera.inputs.add(joystick);
+            } else {
+                // Use default control for desktop (keyboard/mouse)
+                camera.inputs.clear();
+                camera.attachControl(gameCanvas, true);
+            }
+
+            // Example of creating the player
+            player = BABYLON.MeshBuilder.CreateCapsule("player", { height: 1.8, radius: 0.4 }, scene);
+            player.position = new BABYLON.Vector3(0, 0.9, 0);
+            player.material = new BABYLON.StandardMaterial("playerMat", scene);
+            player.material.diffuseColor = new BABYLON.Color3(0, 1, 0); // Green skin as example
+
+            // Game loop
+            engine.runRenderLoop(() => {
+                if (gameStarted && scene) {
+                    scene.render();
+                    // Send player position updates to the server
+                    if (socket && socket.readyState === WebSocket.OPEN && player) {
+                        socket.send(JSON.stringify({
+                            type: 'playerUpdate',
+                            position: {
+                                x: player.position.x,
+                                y: player.position.y,
+                                z: player.position.z
+                            },
+                            rotation: {
+                                y: camera.rotation.y
+                            }
+                        }));
+                    }
+                }
+            });
+
+            window.addEventListener("resize", () => engine.resize());
+        }
+
+        // Basic enemy creation (will be managed by the server in a real multiplayer game)
+        function createEnemy(id, position) {
+            const enemy = BABYLON.MeshBuilder.CreateBox("enemy_" + id, { height: 1.8, width: 0.8, depth: 0.5 }, scene);
+            enemy.position = new BABYLON.Vector3(position.x, position.y, position.z);
+            enemy.material = new BABYLON.StandardMaterial("enemyMat", scene);
+            enemy.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
+            enemies[id] = enemy;
+        }
+
+        // Function to update enemy positions based on server updates
+        function updateEnemy(id, position, rotation) {
+            if (enemies[id]) {
+                enemies[id].position.copyFrom(new BABYLON.Vector3(position.x, position.y, position.z));
+                // Optionally update enemy rotation
+                enemies[id].rotation.y = rotation.y;
+            }
+        }
+
+        // Detect mobile
+        function isTouchDevice() {
+            return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0));
+        }
+
+        if (isTouchDevice()) {
+            isMobile = true;
+            // Optionally, directly connect on mobile without the initial menu
+            // connectToServer();
+        }
+    </script>
 </body>
 </html>
