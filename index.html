@@ -1,191 +1,70 @@
 <!DOCTYPE html>
- <html>
- <head>
-   <meta charset="UTF-8">
-   <title>FPS Game</title>
-   <style>
-     html, body {
-       margin: 0;
-       height: 100%;
-       overflow: hidden;
-       background: #000;
-     }
-     canvas {
-       width: 100%;
-       height: 100%;
-       display: block;
-     }
-     #crosshair {
-       position: absolute;
-       top: 50%;
-       left: 50%;
-       width: 10px;
-       height: 10px;
-       background: white;
-       border-radius: 50%;
- 
-       transform: translate(-50%, -50%);
-       z-index: 2;
-     }
-     #fullscreenBtn {
-       position: absolute;
-       top: 10px;
-       left: 10px;
-       background: #222;
-       color: white;
-       border: none;
-       padding: 8px 12px;
-       font-size: 14px;
-       cursor: pointer;
-       z-index: 2;
-     }
-     #playerHealth {
-       position: absolute;
-       bottom: 20px;
-       left: 20px;
-       width: 200px;
-       height: 20px;
-       background: #222;
-       border: 2px solid #555;
-     }
-     #playerHealthBar {
-       width: 100%;
-       height: 100%;
-       background: limegreen;
-     }
-   </style>
- </head>
- <body>
-   <div id="crosshair"></div>
-   <button id="fullscreenBtn">Fullscreen</button>
-   <div id="playerHealth">
-     <div id="playerHealthBar"></div>
-   </div>
-   <script src="https://cdn.babylonjs.com/babylon.js"></script>
-   <script>
-     const canvas = document.createElement("canvas");
-     canvas.id = "renderCanvas";
-     document.body.appendChild(canvas);
- 
-     const engine = new BABYLON.Engine(canvas, true);
-     const scene = new BABYLON.Scene(engine);
-     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
- 
-     // Camera
-     const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.8, -5), scene);
-     camera.attachControl(canvas, true);
-     camera.speed = 0.25;
-     camera.inertia = 0.5;
-     camera.angularSensibility = 1000; // higher sensitivity
-     camera.checkCollisions = true;
-     camera.applyGravity = true;
-     camera.ellipsoid = new BABYLON.Vector3(0.5, 0.9, 0.5);
-     scene.gravity = new BABYLON.Vector3(0, -0.5, 0);
-     scene.collisionsEnabled = true;
- 
-     // Light & Ground
-     const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
-     const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 100, height: 100}, scene);
-     ground.checkCollisions = true;
- 
-     // Simple gun model
-     const gun = BABYLON.MeshBuilder.CreateBox("gun", {height: 0.2, width: 0.4, depth: 1}, scene);
-     gun.parent = camera;
-     gun.position = new BABYLON.Vector3(0.5, -0.5, 1);
-     gun.material = new BABYLON.StandardMaterial("gunMat", scene);
-     gun.material.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
- 
-     // Muzzle flash
-     const muzzleFlash = BABYLON.MeshBuilder.CreateSphere("flash", {diameter: 0.2}, scene);
-     muzzleFlash.material = new BABYLON.StandardMaterial("flashMat", scene);
-     muzzleFlash.material.emissiveColor = new BABYLON.Color3(1, 0.8, 0.3);
-     muzzleFlash.parent = camera;
-     muzzleFlash.position = new BABYLON.Vector3(0, 0, 2);
-     muzzleFlash.isVisible = false;
- 
-     // Fire weapon
-     function fireWeapon() {
-       gun.position.z -= 0.1;
-       setTimeout(() => gun.position.z += 0.1, 100);
-       muzzleFlash.isVisible = true;
-       setTimeout(() => muzzleFlash.isVisible = false, 100);
- 
-       const ray = new BABYLON.Ray(camera.position, camera.getForwardRay().direction, 100);
-       const hit = scene.pickWithRay(ray);
-       if (hit.pickedMesh && hit.pickedMesh.name.startsWith("enemy")) {
-         hit.pickedMesh.metadata.health -= 20;
-         if (hit.pickedMesh.metadata.health <= 0) {
-           hit.pickedMesh.dispose();
-         }
-       }
-     }
- 
-     // Input
-     window.addEventListener("mousedown", e => {
-       if (e.button === 0) fireWeapon();
-     });
- 
-     window.addEventListener("keydown", e => {
-       const num = parseInt(e.key);
-       if (num >= 1 && num <= 6) console.log("Switch weapon slot", num);
-     });
- 
-     document.getElementById("fullscreenBtn").addEventListener("click", () => {
-       if (!document.fullscreenElement) {
-         document.body.requestFullscreen();
-       } else {
-         document.exitFullscreen();
-       }
-     });
- 
-     // Enemy setup
-     function spawnEnemy(position) {
-       const enemy = BABYLON.MeshBuilder.CreateBox("enemy", {height: 1.8, width: 0.8, depth: 0.5}, scene);
-       enemy.position = position;
-       enemy.material = new BABYLON.StandardMaterial("enemyMat", scene);
-       enemy.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
-       enemy.metadata = {health: 100, attackCooldown: 0};
- 
-       scene.onBeforeRenderObservable.add(() => {
-         if (!enemy.isDisposed()) {
-           const direction = camera.position.subtract(enemy.position).normalize();
-           enemy.lookAt(camera.position);
- 
-           const distance = BABYLON.Vector3.Distance(camera.position, enemy.position);
-           if (distance > 5) {
-             enemy.moveWithCollisions(direction.scale(0.02));
-           } else {
-             if (enemy.metadata.attackCooldown <= 0) {
-               playerHealth -= 10;
-               updateHealthBar();
-               enemy.metadata.attackCooldown = 60; // cooldown in frames
-             } else {
-               enemy.metadata.attackCooldown--;
-             }
-           }
-         }
-       });
-     }
- 
-     spawnEnemy(new BABYLON.Vector3(0, 0.9, 10));
-     spawnEnemy(new BABYLON.Vector3(5, 0.9, 15));
- 
-     // Player health
-     let playerHealth = 100;
-     function updateHealthBar() {
-       const bar = document.getElementById("playerHealthBar");
-       bar.style.width = playerHealth + "%";
-       if (playerHealth <= 0) {
-         alert("You died!");
-         location.reload();
-       }
-     }
- 
-     engine.runRenderLoop(() => {
-       scene.render();
-     });
- 
-     window.addEventListener("resize", () => engine.resize());
-   </script>
- </body>
- </html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FPS Game</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+        #fullscreenBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: #222;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 2;
+        }
+        #playerHealth {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background: #222;
+            border: 2px solid #555;
+        }
+        #playerHealthBar {
+            width: 100%;
+            height: 100%;
+            background: limegreen;
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <button id="fullscreenBtn">Fullscreen</button>
+    <div id="playerHealth">
+        <div id="playerHealthBar"></div>
+    </div>
+    
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="player.js"></script>
+    <script src="weapon.js"></script>
+    <script src="enemy.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
