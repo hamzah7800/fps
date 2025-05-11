@@ -1,71 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>FPS Game</title>
-    <style>
-        html, body {
-            margin: 0;
-            height: 100%;
-            overflow: hidden;
-            background: #000;
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            background: white;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 2;
-        }
-        #fullscreenBtn {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: #222;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            font-size: 14px;
-            cursor: pointer;
-            z-index: 2;
-        }
-        #playerHealth {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 200px;
-            height: 20px;
-            background: #222;
-            border: 2px solid #555;
-        }
-        #playerHealthBar {
-            width: 100%;
-            height: 100%;
-            background: limegreen;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPS Game</title>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { width: 100%; height: 100%; }
+  </style>
 </head>
 <body>
-    <div id="crosshair"></div>
-    <button id="fullscreenBtn">Fullscreen</button>
-    <div id="playerHealth">
-        <div id="playerHealthBar"></div>
-    </div>
-    
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="player.js"></script>
-    <script src="weapon.js"></script>
-    <script src="enemy.js"></script>
-    <script src="game.js"></script>
-    <script src="https://cdn.babylonjs.com/cannon.js"></script>
+  <canvas id="renderCanvas"></canvas>
+  <script src="game.js"></script>
 </body>
 </html>
