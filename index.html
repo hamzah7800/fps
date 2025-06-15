@@ -1,21 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Three.js FPS Game</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simple FPS Three.js Example</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    font-family: sans-serif;
+  }
+  #instructions {
+    position: absolute;
+    top: 40%;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    user-select: none;
+  }
+</style>
 </head>
 <body>
-  <div id="game-container"></div>
+<div id="instructions">Click to play</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
+<script>
+  // Basic scene setup
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x202020);
 
-  <!-- Joystick library -->
-  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
-  <!-- Three.js -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <!-- PointerLockControls -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/PointerLockControls.js"></script>
-  <!-- Our game script -->
-  <script src="game.js"></script>
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+  // Renderer
+  const renderer = new THREE.WebGLRenderer({antialias: true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Lights
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+  hemisphereLight.position.set(0, 20, 0);
+  scene.add(hemisphereLight);
+
+  const ambientLight = new THREE.AmbientLight(0x888888);
+  scene.add(ambientLight);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+  directionalLight.position.set(5, 10, 7);
+  scene.add(directionalLight);
+
+  // Floor
+  const floorGeometry = new THREE.PlaneGeometry(100, 100);
+  const floorMaterial = new THREE.MeshStandardMaterial({color: 0x555555});
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Test cube to confirm visibility
+  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const boxMaterial = new THREE.MeshStandardMaterial({color: 0xff0000});
+  const cube = new THREE.Mesh(boxGeometry, boxMaterial);
+  cube.position.set(0, 1, -5);
+  scene.add(cube);
+
+  // PointerLockControls for FPS look
+  const controls = new THREE.PointerLockControls(camera, document.body);
+  scene.add(controls.getObject());
+
+  // Instructions element for clicking to start
+  const instructions = document.getElementById('instructions');
+  instructions.addEventListener('click', () => {
+    controls.lock();
+  });
+
+  controls.addEventListener('lock', () => {
+    instructions.style.display = 'none';
+  });
+  controls.addEventListener('unlock', () => {
+    instructions.style.display = '';
+  });
+
+  // Movement state
+  const move = { forward: false, backward: false, left: false, right: false };
+  const velocity = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  const speed = 10.0; // units per second
+
+  // Keyboard input
+  document.addEventListener('keydown', (event) => {
+    switch(event.code) {
+      case 'KeyW': move.forward = true; break;
+      case 'KeyS': move.backward = true; break;
+      case 'KeyA': move.left = true; break;
+      case 'KeyD': move.right = true; break;
+    }
+  });
+  document.addEventListener('keyup', (event) => {
+    switch(event.code) {
+      case 'KeyW': move.forward = false; break;
+      case 'KeyS': move.backward = false; break;
+      case 'KeyA': move.left = false; break;
+      case 'KeyD': move.right = false; break;
+    }
+  });
+
+  // Set initial camera height (player eye level)
+  controls.getObject().position.set(0, 1.6, 5);
+
+  // Animation loop
+  let prevTime = performance.now();
+  function animate() {
+    requestAnimationFrame(animate);
+
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000;
+
+    if (controls.isLocked === true) {
+      // Calculate movement velocity
+      velocity.x -= velocity.x * 10.0 * delta;
+      velocity.z -= velocity.z * 10.0 * delta;
+
+      direction.z = Number(move.forward) - Number(move.backward);
+      direction.x = Number(move.right) - Number(move.left);
+      direction.normalize(); // this ensures consistent movements in all directions
+
+      if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
+      if (move.left || move.right) velocity.x -= direction.x * speed * delta;
+
+      // Move the controls object
+      controls.moveRight(-velocity.x * delta);
+      controls.moveForward(-velocity.z * delta);
+    }
+
+    prevTime = time;
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Responsive resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
 </body>
 </html>
