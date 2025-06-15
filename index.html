@@ -9,6 +9,7 @@
     margin: 0;
     overflow: hidden;
     font-family: sans-serif;
+    background-color: #202020; /* dark background */
   }
   #instructions {
     position: absolute;
@@ -27,28 +28,18 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
 <script>
-  // Basic scene setup
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x202020);
 
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 
-  // Renderer
   const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // Lights
-  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
-  hemisphereLight.position.set(0, 20, 0);
-  scene.add(hemisphereLight);
-
-  const ambientLight = new THREE.AmbientLight(0x888888);
+  // Strong ambient light so everything is visible
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
   scene.add(ambientLight);
-
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-  directionalLight.position.set(5, 10, 7);
-  scene.add(directionalLight);
 
   // Floor
   const floorGeometry = new THREE.PlaneGeometry(100, 100);
@@ -58,18 +49,16 @@
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Test cube to confirm visibility
-  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const boxMaterial = new THREE.MeshStandardMaterial({color: 0xff0000});
-  const cube = new THREE.Mesh(boxGeometry, boxMaterial);
+  // Cube with basic material (ignores lighting)
+  const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const cubeMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+  const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
   cube.position.set(0, 1, -5);
   scene.add(cube);
 
-  // PointerLockControls for FPS look
   const controls = new THREE.PointerLockControls(camera, document.body);
   scene.add(controls.getObject());
 
-  // Instructions element for clicking to start
   const instructions = document.getElementById('instructions');
   instructions.addEventListener('click', () => {
     controls.lock();
@@ -78,17 +67,16 @@
   controls.addEventListener('lock', () => {
     instructions.style.display = 'none';
   });
+
   controls.addEventListener('unlock', () => {
     instructions.style.display = '';
   });
 
-  // Movement state
   const move = { forward: false, backward: false, left: false, right: false };
   const velocity = new THREE.Vector3();
   const direction = new THREE.Vector3();
-  const speed = 10.0; // units per second
+  const speed = 10.0;
 
-  // Keyboard input
   document.addEventListener('keydown', (event) => {
     switch(event.code) {
       case 'KeyW': move.forward = true; break;
@@ -106,10 +94,8 @@
     }
   });
 
-  // Set initial camera height (player eye level)
   controls.getObject().position.set(0, 1.6, 5);
 
-  // Animation loop
   let prevTime = performance.now();
   function animate() {
     requestAnimationFrame(animate);
@@ -118,18 +104,16 @@
     const delta = (time - prevTime) / 1000;
 
     if (controls.isLocked === true) {
-      // Calculate movement velocity
       velocity.x -= velocity.x * 10.0 * delta;
       velocity.z -= velocity.z * 10.0 * delta;
 
       direction.z = Number(move.forward) - Number(move.backward);
       direction.x = Number(move.right) - Number(move.left);
-      direction.normalize(); // this ensures consistent movements in all directions
+      direction.normalize();
 
       if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
       if (move.left || move.right) velocity.x -= direction.x * speed * delta;
 
-      // Move the controls object
       controls.moveRight(-velocity.x * delta);
       controls.moveForward(-velocity.z * delta);
     }
@@ -139,7 +123,6 @@
   }
   animate();
 
-  // Responsive resize
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
