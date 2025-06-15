@@ -47,7 +47,7 @@ window.addEventListener("resize", () => {
 });
 
 // Multiplayer stub
-let socket = new WebSocket("wss://yourserver.example.com"); // Replace with real server
+let socket = new WebSocket("https://76fde16c-7fe6-45f3-8827-b40f1bbdd3c4-00-3jg5slrdfzlh.riker.replit.dev/");
 
 socket.onopen = () => {
   console.log("Connected to WebSocket server");
