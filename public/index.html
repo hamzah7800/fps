@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multiplayer Game</title>
+  <script defer src="index.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #log { white-space: pre-wrap; height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Multiplayer Game</h1>
+  <button id="createRoom">Create Room</button>
+  <input id="joinCode" placeholder="Enter Room Code" maxlength="4" style="text-transform:uppercase" />
+  <button id="joinRoom">Join Room</button>
+  <div id="log"></div>
+</body>
+</html>
