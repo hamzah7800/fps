@@ -2,122 +2,65 @@ const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
 const scene = new BABYLON.Scene(engine);
 
+// Hide loading screen
 document.getElementById("loadingScreen").style.display = "none";
 
-const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-light.intensity = 0.9;
+// Light
+new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-// Ground
+// Ground with grass texture
 const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
 const grassMat = new BABYLON.StandardMaterial("grassMat", scene);
 grassMat.diffuseTexture = new BABYLON.Texture("assets/grass.png", scene);
 ground.material = grassMat;
-ground.checkCollisions = true;
 
-// Placeholder Player (capsule + head)
-const player = BABYLON.MeshBuilder.CreateCapsule("player", { height: 1.8, radius: 0.4, subdivisions: 8 }, scene);
-player.position.y = 0.9;
-player.checkCollisions = true;
-player.ellipsoid = new BABYLON.Vector3(0.4, 0.9, 0.4);
-player.ellipsoidOffset = new BABYLON.Vector3(0, 0.9, 0);
+// Player (placeholder box)
+const player = BABYLON.MeshBuilder.CreateBox("player", { size: 1 }, scene);
+player.position.y = 0.5;
 
-const head = BABYLON.MeshBuilder.CreateSphere("head", { diameter: 0.6 }, scene);
-head.parent = player;
-head.position = new BABYLON.Vector3(0, 0.9, 0);
-
-// Camera setup
-const fpCam = new BABYLON.FreeCamera("fpCam", new BABYLON.Vector3(0, 1.6, -2), scene);
+// Cameras
+const fpCam = new BABYLON.FreeCamera("fpCam", new BABYLON.Vector3(0, 2, -1), scene);
 fpCam.parent = player;
-fpCam.position = new BABYLON.Vector3(0, 1.6, -2);
-scene.activeCamera = fpCam;
-fpCam.attachControl(canvas, true);
-fpCam.checkCollisions = false;
-fpCam.applyGravity = false;
+const tpCam = new BABYLON.ArcRotateCamera("tpCam", Math.PI / 2, Math.PI / 4, 6, player.position, scene);
+let activeCam = fpCam;
+scene.activeCamera = activeCam;
+scene.activeCamera.attachControl(canvas, true);
 
-fpCam.inputs.clear(); // remove default inputs, we'll use our own controls
+// Movement variables
+let keys = {}, joy = { x: 0, y: 0 }, playerSpeed = 0.1, moveVec = new BABYLON.Vector3();
 
-// Player movement vars
-let playerSpeed = 0.12;
-let jumpSpeed = 0.25;
-let velocityY = 0;
-let gravity = -0.015;
-let isGrounded = true;
+// Jump & gravity
+let velocityY = 0, gravity = -0.02, isGrounded = true, jumpSpeed = 0.4;
 
-// Movement input
-let keys = {};
-let joy = { x: 0, y: 0 };
+// Joystick sensitivity & aim assist toggle
+let joystickSensitivity = 1.0;
+let aimAssistEnabled = true;
 
-// Settings UI Elements
-const settingsIcon = document.getElementById("settingsIcon");
-const settingsPanel = document.getElementById("settingsPanel");
-const joystickSensitivityControl = document.getElementById("joystickSensitivity");
-const aimAssistToggle = document.getElementById("aimAssistToggle");
+// Bullets array
+const bullets = [];
 
-settingsIcon.onclick = () => {
-  settingsPanel.style.display = settingsPanel.style.display === "block" ? "none" : "block";
-};
-
-let joystickSensitivity = parseFloat(joystickSensitivityControl.value);
-let aimAssistEnabled = aimAssistToggle.checked;
-
-joystickSensitivityControl.oninput = () => {
-  joystickSensitivity = parseFloat(joystickSensitivityControl.value);
-};
-
-aimAssistToggle.onchange = () => {
-  aimAssistEnabled = aimAssistToggle.checked;
-};
-
-// Keyboard input
-window.addEventListener("keydown", (e) => (keys[e.key.toLowerCase()] = true));
-window.addEventListener("keyup", (e) => (keys[e.key.toLowerCase()] = false));
-
-// Joystick dynamic setup
-const joystickZone = document.getElementById("joystickContainer");
-const nipple = nipplejs.create({
-  zone: joystickZone,
-  mode: "dynamic",
-  color: "white",
-  catchDistance: 100,
-  multitouch: false,
-});
-
-nipple.on("move", (_, data) => {
-  let x = data.vector.x;
-  let y = data.vector.y;
-
-  const deadzone = 0.15;
-  if (Math.abs(x) < deadzone) x = 0;
-  if (Math.abs(y) < deadzone) y = 0;
-
-  joy.x = x * joystickSensitivity;
-  joy.y = y * joystickSensitivity;
-
-  joy.x = Math.max(-1, Math.min(1, joy.x));
-  joy.y = Math.max(-1, Math.min(1, joy.y));
-});
-
-nipple.on("end", () => {
-  joy = { x: 0, y: 0 };
-});
-
-// Shooting, reloading, jumping setup
-let ammo = 10;
-const maxAmmo = 10;
+// Ammo management
+const maxAmmo = 12;
+let ammo = maxAmmo;
 let reloading = false;
 
-const shootBtn = document.getElementById("shootBtn");
-const reloadBtn = document.getElementById("reloadBtn");
-const jumpBtn = document.getElementById("jumpBtn");
-const ammoDisplay = document.getElementById("ammoDisplay");
+// Setup UI elements
+const reloadBtn = document.createElement("button");
+reloadBtn.textContent = "Reload";
+reloadBtn.style.position = "absolute";
+reloadBtn.style.top = "10px";
+reloadBtn.style.left = "10px";
+reloadBtn.style.zIndex = "2";
+document.body.appendChild(reloadBtn);
 
-shootBtn.onclick = () => {
-  if (ammo > 0 && !reloading) {
-    ammo--;
-    updateAmmoDisplay();
-    shootBullet();
-  }
-};
+const ammoDisplay = document.createElement("div");
+ammoDisplay.style.position = "absolute";
+ammoDisplay.style.top = "40px";
+ammoDisplay.style.left = "10px";
+ammoDisplay.style.color = "white";
+ammoDisplay.style.zIndex = "2";
+ammoDisplay.textContent = `Ammo: ${ammo}/${maxAmmo}`;
+document.body.appendChild(ammoDisplay);
 
 reloadBtn.onclick = () => {
   if (!reloading && ammo < maxAmmo) {
@@ -134,31 +77,26 @@ reloadBtn.onclick = () => {
   }
 };
 
-jumpBtn.onclick = () => {
-  if (isGrounded) {
-    velocityY = jumpSpeed;
-    isGrounded = false;
-  }
-};
-
 function updateAmmoDisplay() {
-  ammoDisplay.textContent = `Ammo: ${ammo} / ${maxAmmo}`;
+  ammoDisplay.textContent = `Ammo: ${ammo}/${maxAmmo}`;
 }
-updateAmmoDisplay();
 
-// Bullets array for tracking bullets
-const bullets = [];
-
+// Shoot bullet - spawn lower and faster
 function shootBullet() {
-  // Create a small sphere as bullet
+  if (ammo <= 0 || reloading) return;
+  ammo--;
+  updateAmmoDisplay();
+
   const bullet = BABYLON.MeshBuilder.CreateSphere("bullet", { diameter: 0.1 }, scene);
-  bullet.position = player.position.add(new BABYLON.Vector3(0, 1.5, 0));
+  bullet.position = player.position.add(new BABYLON.Vector3(0, 1.3, 0)); // spawn at gun height
   bullet.material = new BABYLON.StandardMaterial("bulletMat", scene);
   bullet.material.emissiveColor = new BABYLON.Color3(1, 0, 0);
 
-  // Bullet velocity vector based on camera direction
   const forward = fpCam.getForwardRay().direction.normalize();
-  bullet.metadata = { velocity: forward.scale(1.5) };
+  bullet.metadata = {
+    velocity: forward.scale(2.5),
+    lastPosition: bullet.position.clone(),
+  };
 
   bullets.push(bullet);
 }
@@ -175,14 +113,14 @@ function spawnEnemy(position) {
   enemies.push(enemy);
 }
 
-// Spawn some enemies at random positions
+// Spawn enemies randomly
 for (let i = 0; i < 8; i++) {
   const x = (Math.random() - 0.5) * 40;
   const z = (Math.random() - 0.5) * 40;
   spawnEnemy(new BABYLON.Vector3(x, 0.4, z));
 }
 
-// Make enemies move slightly to make them harder to hit
+// Enemy slight movement for harder target
 function moveEnemies() {
   enemies.forEach((enemy, i) => {
     const t = performance.now() * 0.001 + i * 100;
@@ -191,41 +129,49 @@ function moveEnemies() {
   });
 }
 
-// Check bullet collisions with enemies
+// Bullet collision detection with raycast for accuracy
 function checkBulletCollisions() {
   for (let b = bullets.length - 1; b >= 0; b--) {
     const bullet = bullets[b];
+    const lastPos = bullet.metadata.lastPosition.clone();
     bullet.position.addInPlace(bullet.metadata.velocity);
+    bullet.metadata.lastPosition = bullet.position.clone();
 
-    // Remove bullet if too far
-    if (BABYLON.Vector3.Distance(bullet.position, player.position) > 50) {
+    const ray = new BABYLON.Ray(lastPos, bullet.position.subtract(lastPos).normalize(), BABYLON.Vector3.Distance(bullet.position, lastPos));
+
+    let hitEnemyIndex = -1;
+    for (let e = 0; e < enemies.length; e++) {
+      const enemy = enemies[e];
+      const intersect = ray.intersectsMesh(enemy, false);
+      if (intersect.hit) {
+        hitEnemyIndex = e;
+        break;
+      }
+    }
+
+    if (hitEnemyIndex !== -1) {
+      const enemy = enemies[hitEnemyIndex];
+      enemy.metadata.health--;
+      if (enemy.metadata.health <= 0) {
+        enemy.dispose();
+        enemies.splice(hitEnemyIndex, 1);
+      }
       bullet.dispose();
       bullets.splice(b, 1);
       continue;
     }
 
-    // Check collision with enemies
-    for (let e = enemies.length - 1; e >= 0; e--) {
-      const enemy = enemies[e];
-      if (enemy.intersectsPoint(bullet.position)) {
-        enemy.metadata.health--;
-        if (enemy.metadata.health <= 0) {
-          enemy.dispose();
-          enemies.splice(e, 1);
-        }
-        bullet.dispose();
-        bullets.splice(b, 1);
-        break;
-      }
+    if (BABYLON.Vector3.Distance(bullet.position, player.position) > 50) {
+      bullet.dispose();
+      bullets.splice(b, 1);
     }
   }
 }
 
-// Aim assist - smoothly rotate camera toward closest enemy
+// Aim assist towards closest enemy
 function applyAimAssist() {
   if (!aimAssistEnabled || enemies.length === 0) return;
 
-  // Find closest enemy to center of screen (player forward)
   const forward = fpCam.getForwardRay().direction;
   let closestEnemy = null;
   let closestAngle = Infinity;
@@ -241,19 +187,15 @@ function applyAimAssist() {
 
   if (!closestEnemy) return;
 
-  // Calculate desired yaw and pitch for camera to look at enemy
   const toEnemy = closestEnemy.position.subtract(fpCam.position).normalize();
   const desiredYaw = Math.atan2(toEnemy.x, toEnemy.z);
   const desiredPitch = Math.asin(toEnemy.y);
 
-  // Current camera rotation
   let yaw = fpCam.rotation.y;
   let pitch = fpCam.rotation.x;
 
-  // Interpolate rotation toward enemy target (slowly for smoothness)
   const lerpFactor = 0.1;
 
-  // Normalize angle difference to [-PI, PI]
   function normalizeAngle(angle) {
     while (angle > Math.PI) angle -= 2 * Math.PI;
     while (angle < -Math.PI) angle += 2 * Math.PI;
@@ -266,121 +208,146 @@ function applyAimAssist() {
   yaw += yawDiff * lerpFactor;
   pitch += pitchDiff * lerpFactor;
 
-  // Clamp pitch to avoid flipping
   pitch = Math.min(Math.max(pitch, -Math.PI / 2), Math.PI / 2);
 
   fpCam.rotation.y = yaw;
   fpCam.rotation.x = pitch;
 }
 
-// Gamepad (PS4) support
+// Joystick & controls
+window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+const nipple = nipplejs.create({
+  zone: document.getElementById("joystickContainer"),
+  mode: 'static',
+  position: { left: '75px', bottom: '75px' },
+  color: 'white'
+});
+
+nipple.on('move', (_, data) => {
+  joy = { x: data.vector.x * joystickSensitivity, y: data.vector.y * joystickSensitivity };
+});
+nipple.on('end', () => {
+  joy = { x: 0, y: 0 };
+});
+
+// Settings toggle panel and controls
+document.getElementById("settingsIcon").onclick = () => {
+  const panel = document.getElementById("settingsPanel");
+  panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+};
+
+document.getElementById("resolutionScale").oninput = e => {
+  engine.setHardwareScalingLevel(1 / parseFloat(e.target.value));
+};
+
+document.getElementById("sensitivity").oninput = e => {
+  joystickSensitivity = parseFloat(e.target.value);
+};
+
+document.getElementById("toggleView").onchange = e => {
+  scene.activeCamera.detachControl();
+  activeCam = e.target.checked ? fpCam : tpCam;
+  scene.activeCamera = activeCam;
+  activeCam.attachControl(canvas, true);
+};
+
+document.getElementById("aimAssistToggle").onchange = e => {
+  aimAssistEnabled = e.target.checked;
+};
+
+// PS4 gamepad support
 let gamepad = null;
-window.addEventListener("gamepadconnected", (e) => {
+window.addEventListener("gamepadconnected", e => {
   console.log("Gamepad connected:", e.gamepad);
   gamepad = e.gamepad;
 });
-window.addEventListener("gamepaddisconnected", (e) => {
-  console.log("Gamepad disconnected:", e.gamepad);
+window.addEventListener("gamepaddisconnected", e => {
   if (gamepad && gamepad.index === e.gamepad.index) {
     gamepad = null;
   }
 });
 
-// Player update loop
+// Update movement vector and apply inputs
+function updateMov() {
+  // Use keyboard keys
+  joy.x = 0; joy.y = 0;
+  if (keys['w'] || keys['arrowup']) joy.y = 1;
+  if (keys['s'] || keys['arrowdown']) joy.y = -1;
+  if (keys['a'] || keys['arrowleft']) joy.x = -1;
+  if (keys['d'] || keys['arrowright']) joy.x = 1;
+  joy.x *= joystickSensitivity;
+  joy.y *= joystickSensitivity;
+}
+
+// Main loop updates
 scene.onBeforeRenderObservable.add(() => {
-  // Update gamepad states
+  // Update movement from keys/gamepad/joystick
+  updateMov();
+
+  // Gamepad input handling
   if (gamepad) {
     const gp = navigator.getGamepads()[gamepad.index];
     if (gp) {
-      // Left stick for movement (axes 0,1)
       joy.x = gp.axes[0] * joystickSensitivity;
-      joy.y = -gp.axes[1] * joystickSensitivity; // invert Y for natural feel
+      joy.y = -gp.axes[1] * joystickSensitivity;
 
-      // Right stick for looking (axes 2,3)
-      let lookX = gp.axes[2];
-      let lookY = gp.axes[3];
-
+      const lookX = gp.axes[2];
+      const lookY = gp.axes[3];
       const lookSensitivity = 0.03;
       fpCam.rotation.y += lookX * lookSensitivity;
       fpCam.rotation.x += lookY * lookSensitivity;
-
       fpCam.rotation.x = Math.min(Math.max(fpCam.rotation.x, -Math.PI / 2), Math.PI / 2);
 
-      // Buttons for shooting (R2 typically button 7)
-      if (gp.buttons[7]?.pressed && ammo > 0 && !reloading) {
-        ammo--;
-        updateAmmoDisplay();
-        shootBullet();
+      // Buttons: shoot (7 = R2), reload (4 = L1), jump (0 = X)
+      if (gp.buttons[7].pressed) shootBullet();
+      if (gp.buttons[4].pressed && !reloading && ammo < maxAmmo) {
+        reloadBtn.onclick();
       }
-
-      // Button for reload (Square is button 2)
-      if (gp.buttons[2]?.pressed && !reloading && ammo < maxAmmo) {
-        reloading = true;
-        reloadBtn.disabled = true;
-        reloadBtn.textContent = "Reloading...";
-        setTimeout(() => {
-          ammo = maxAmmo;
-          reloading = false;
-          reloadBtn.disabled = false;
-          reloadBtn.textContent = "Reload";
-          updateAmmoDisplay();
-        }, 2000);
-      }
-
-      // Button for jump (Cross is button 0)
-      if (gp.buttons[0]?.pressed && isGrounded) {
+      if (gp.buttons[0].pressed && isGrounded) {
         velocityY = jumpSpeed;
         isGrounded = false;
       }
     }
   }
 
-  // Movement vector (with sensitivity)
-  const forwardVec = new BABYLON.Vector3(
-    Math.sin(fpCam.rotation.y),
-    0,
-    Math.cos(fpCam.rotation.y)
-  );
+  // Player rotation by joystick
+  if (joy.x !== 0 || joy.y !== 0) {
+    const angle = Math.atan2(joy.x, joy.y);
+    player.rotation.y = angle;
+    const forwardMove = new BABYLON.Vector3(Math.sin(angle), 0, Math.cos(angle)).scale(playerSpeed);
+    player.moveWithCollisions(forwardMove);
+  }
 
-  const rightVec = new BABYLON.Vector3(
-    Math.sin(fpCam.rotation.y + Math.PI / 2),
-    0,
-    Math.cos(fpCam.rotation.y + Math.PI / 2)
-  );
-
-  let move = forwardVec.scale(joy.y).add(rightVec.scale(joy.x));
-  if (move.length() > 1) move = move.normalize();
-
-  player.moveWithCollisions(move.scale(playerSpeed));
-
-  // Gravity & Jump
+  // Gravity & jump physics
   velocityY += gravity;
   player.position.y += velocityY;
-
-  if (player.position.y <= 0.9) {
-    player.position.y = 0.9;
+  if (player.position.y <= 0.5) {
+    player.position.y = 0.5;
     velocityY = 0;
     isGrounded = true;
   }
 
-  // Shoot with keyboard mouse controls (optional here)
-  // (Can add mouse click handlers if desired)
+  // Update camera target for third person
+  tpCam.target = player.position;
 
-  // Apply aim assist
-  applyAimAssist();
-
-  // Move enemies a bit to be harder targets
-  moveEnemies();
-
-  // Bullet updates and collision check
+  // Bullets and enemies
   checkBulletCollisions();
-
-  // Ammo display update handled on events only
+  moveEnemies();
+  applyAimAssist();
 });
+
+canvas.addEventListener("click", () => shootBullet());
 
 engine.runRenderLoop(() => {
   scene.render();
 });
+
+window.addEventListener("resize", () => {
+  engine.resize();
+});
+
 
 window.addEventListener("resize", () => {
   engine.resize();
