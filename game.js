@@ -2,239 +2,305 @@ const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
 const scene = new BABYLON.Scene(engine);
 
-document.getElementById("loadingScreen").style.display = "none";
+let sensitivity = 1;
+let playerSpeed = 0.1;
+let maxHealth = 100;
+let playerHealth = maxHealth;
+let ammoMax = 12;
+let ammo = ammoMax;
+let isReloading = false;
+const reloadTime = 2000; // ms
+let canShoot = true;
+let shootCooldown = 300; // ms between shots
 
-// Lighting
-new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-
-// Ground
-const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, scene);
-const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
-groundMat.diffuseTexture = new BABYLON.Texture("assets/grass.png", scene);
-ground.material = groundMat;
-
-// Player setup
-const player = BABYLON.MeshBuilder.CreateBox("player", { size: 2 }, scene);
-player.isVisible = false;
-player.ellipsoid = new BABYLON.Vector3(1, 1, 1);
-player.position.y = 2;
-let playerHealth = 100;
-let isDead = false;
-let respawnTime = 5;
-let ammoCount = 10;
-
-// Camera
-const camera = new BABYLON.UniversalCamera("cam", new BABYLON.Vector3(0, 2, -5), scene);
-camera.attachControl(canvas, true);
-camera.parent = player;
-camera.speed = 0.5;
-camera.angularSensibility = 2000;
-
-// Pointer lock
-canvas.addEventListener("click", () => canvas.requestPointerLock());
-
-// Load gun
-BABYLON.SceneLoader.ImportMesh("", "assets/models/", "gun.gbl", scene, (meshes) => {
-    const gun = meshes[0];
-    gun.parent = camera;
-    gun.position = new BABYLON.Vector3(0.6, -0.6, 1.2);
-    gun.scaling = new BABYLON.Vector3(2, 2, 2);
+// Hide loading screen once ready
+scene.executeWhenReady(() => {
+  document.getElementById("loadingScreen").style.display = "none";
 });
 
-// HUD elements
-const hud = document.createElement("div");
-hud.style.position = "absolute";
-hud.style.bottom = "10px";
-hud.style.left = "10px";
-hud.style.color = "white";
-hud.style.font = "16px sans-serif";
-hud.style.zIndex = "3";
-document.body.appendChild(hud);
+// LIGHT
+new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-const crosshair = document.createElement("div");
-crosshair.style.position = "absolute";
-crosshair.style.left = "50%";
-crosshair.style.top = "50%";
-crosshair.style.transform = "translate(-50%, -50%)";
-crosshair.style.width = "8px";
-crosshair.style.height = "8px";
-crosshair.style.border = "2px solid white";
-crosshair.style.borderRadius = "50%";
-crosshair.style.zIndex = "3";
-document.body.appendChild(crosshair);
+// GROUND
+const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
+const grassMat = new BABYLON.StandardMaterial("grassMat", scene);
+grassMat.diffuseTexture = new BABYLON.Texture("assets/grass.png", scene);
+ground.material = grassMat;
 
-const deathScreen = document.createElement("div");
-deathScreen.style.position = "absolute";
-deathScreen.style.top = "50%";
-deathScreen.style.left = "50%";
-deathScreen.style.transform = "translate(-50%, -50%)";
-deathScreen.style.fontSize = "36px";
-deathScreen.style.color = "red";
-deathScreen.style.display = "none";
-deathScreen.style.zIndex = "4";
-document.body.appendChild(deathScreen);
+// PLAYER
+const player = BABYLON.MeshBuilder.CreateBox("player", { size: 1 }, scene);
+player.position.y = 0.5;
+player.isVisible = false; // hide player box (use camera for view)
 
-const gameDuration = 180; // seconds
-let remainingTime = gameDuration;
+// CAMERAS
+const fpCam = new BABYLON.FreeCamera("fpCam", new BABYLON.Vector3(0, 2, 0), scene);
+fpCam.attachControl(canvas, true);
+fpCam.minZ = 0.1;
+fpCam.parent = player;
+scene.activeCamera = fpCam;
 
-// Ammo Pickup
-const ammoBox = BABYLON.MeshBuilder.CreateSphere("ammo", { diameter: 1 }, scene);
-ammoBox.position = new BABYLON.Vector3(5, 1, 5);
-ammoBox.material = new BABYLON.StandardMaterial("ammoMat", scene);
-ammoBox.material.emissiveColor = new BABYLON.Color3(0, 1, 0);
+// POINTER LOCK
+canvas.addEventListener("click", () => {
+  canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock;
+  if (canvas.requestPointerLock) {
+    canvas.requestPointerLock();
+  }
+});
+document.addEventListener("pointerlockchange", () => {
+  const plElement = document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement;
+  if (!plElement) {
+    // pointer unlocked, pause input maybe
+  }
+});
 
-// Controls
-let keys = {};
+// MOVEMENT
+const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// Shooting
-window.addEventListener("click", () => {
-    if (isDead || ammoCount <= 0) return;
-    ammoCount--;
-
-    const ray = new BABYLON.Ray(camera.position, camera.getForwardRay().direction, 100);
-    const hit = scene.pickWithRay(ray);
-    if (hit.pickedMesh && hit.pickedMesh.name.includes("enemy")) {
-        hit.pickedMesh.health -= 1;
-        if (hit.pickedMesh.health <= 0) {
-            hit.pickedMesh.dispose();
-        } else {
-            updateHealthBar(hit.pickedMesh);
-        }
-    }
+// JOYSTICK SETUP
+let joy = { x: 0, y: 0 };
+const joystick = nipplejs.create({
+  zone: document.getElementById("joystickContainer"),
+  mode: "static",
+  position: { left: "75px", bottom: "75px" },
+  color: "white"
+});
+joystick.on("move", (_, data) => {
+  joy = data.vector;
+});
+joystick.on("end", () => {
+  joy = { x: 0, y: 0 };
 });
 
-// Enemies
-const enemies = [];
-function spawnEnemy(pos) {
-    const e = BABYLON.MeshBuilder.CreateSphere("enemy", { diameter: 2 }, scene);
-    e.position = pos.clone();
-    e.material = new BABYLON.StandardMaterial("eMat", scene);
-    e.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
-    e.health = 3;
+// MOVEMENT VECTOR
+let moveVec = new BABYLON.Vector3();
 
-    // Health bar
-    const bar = new BABYLON.GUI.Rectangle();
-    bar.width = "40px";
-    bar.height = "6px";
-    bar.color = "red";
-    bar.background = "red";
-    bar.alpha = 0.8;
-    const plane = BABYLON.MeshBuilder.CreatePlane("hpBar", { size: 2 }, scene);
-    plane.position = new BABYLON.Vector3(0, 2.5, 0);
-    plane.parent = e;
-    e.healthBar = bar;
+function updateMovementVector() {
+  // WASD keys control
+  let forward = 0, right = 0;
+  if (keys["w"] || keys["arrowup"]) forward += 1;
+  if (keys["s"] || keys["arrowdown"]) forward -= 1;
+  if (keys["a"] || keys["arrowleft"]) right -= 1;
+  if (keys["d"] || keys["arrowright"]) right += 1;
 
-    enemies.push(e);
+  // Combine joystick input
+  forward += joy.y;
+  right += joy.x;
+
+  // Clamp to max 1 or -1
+  forward = Math.max(-1, Math.min(1, forward));
+  right = Math.max(-1, Math.min(1, right));
+
+  // Calculate move vector relative to camera forward/right
+  let camForward = fpCam.getForwardRay().direction;
+  camForward.y = 0;
+  camForward.normalize();
+
+  let camRight = BABYLON.Vector3.Cross(camForward, BABYLON.Axis.Y).normalize();
+
+  moveVec = camForward.scale(forward * playerSpeed).add(camRight.scale(right * playerSpeed));
 }
 
-spawnEnemy(new BABYLON.Vector3(10, 1, 10));
-spawnEnemy(new BABYLON.Vector3(-15, 1, -20));
-spawnEnemy(new BABYLON.Vector3(25, 1, -10));
+// LOAD GUN MODEL & ATTACH TO CAMERA
+let gunMesh = null;
+BABYLON.SceneLoader.ImportMesh("", "assets/models/", "gun.gbl", scene, (meshes) => {
+  gunMesh = meshes[0];
+  gunMesh.scaling.scaleInPlace(0.5);
+  gunMesh.parent = fpCam;
+  gunMesh.position = new BABYLON.Vector3(0.5, -0.7, 1);
+  gunMesh.rotation = new BABYLON.Vector3(0, Math.PI, 0);
+});
 
-// Enemy update
-function updateEnemies() {
-    enemies.forEach(e => {
-        if (!e || e._isDisposed) return;
-        const dist = BABYLON.Vector3.Distance(player.position, e.position);
-        if (dist < 30) {
-            const dir = player.position.subtract(e.position).normalize();
-            e.moveWithCollisions(dir.scale(0.03));
+// HUD
+const hud = document.createElement("div");
+hud.style.position = "absolute";
+hud.style.bottom = "20px";
+hud.style.left = "20px";
+hud.style.color = "white";
+hud.style.fontFamily = "monospace";
+hud.style.fontSize = "16px";
+hud.style.zIndex = "15";
+document.body.appendChild(hud);
 
-            if (dist < 3 && !isDead) {
-                playerHealth -= 0.5;
-                if (playerHealth <= 0) {
-                    dieAndRespawn();
-                }
-            }
-        }
-    });
+const reloadText = document.getElementById("reloadText");
+
+// HEALTH & RESPAWN
+let isDead = false;
+let respawnTime = 5; // seconds
+let respawnTimer = 0;
+
+// BULLETS
+const bullets = [];
+const bulletSpeed = 1.5;
+const bulletSize = 0.1;
+
+function spawnBullet() {
+  if (ammo <= 0 || isReloading || !canShoot) return;
+  ammo--;
+  updateHUD();
+
+  const bullet = BABYLON.MeshBuilder.CreateSphere("bullet", { diameter: bulletSize }, scene);
+  bullet.position = fpCam.position.add(fpCam.getForwardRay().direction.scale(1));
+  bullet.material = new BABYLON.StandardMaterial("bulletMat", scene);
+  bullet.material.emissiveColor = new BABYLON.Color3(1, 0.8, 0);
+  bullet.forward = fpCam.getForwardRay().direction.clone();
+
+  bullets.push(bullet);
+
+  canShoot = false;
+  setTimeout(() => {
+    canShoot = true;
+  }, shootCooldown);
 }
 
-// Health bar logic
-function updateHealthBar(enemy) {
-    if (!enemy.healthBarMesh) {
-        const bar = BABYLON.MeshBuilder.CreatePlane("bar", { width: 1.5, height: 0.2 }, scene);
-        bar.position.y = 2.5;
-        bar.parent = enemy;
-        const mat = new BABYLON.StandardMaterial("barMat", scene);
-        mat.diffuseColor = new BABYLON.Color3(1, 0, 0);
-        bar.material = mat;
-        enemy.healthBarMesh = bar;
-    }
-    const scale = enemy.health / 3;
-    enemy.healthBarMesh.scaling.x = scale;
-}
-
-// Movement
-engine.runRenderLoop(() => {
-    if (!isDead) {
-        let dir = new BABYLON.Vector3();
-        if (keys['w']) dir.z += 1;
-        if (keys['s']) dir.z -= 1;
-        if (keys['a']) dir.x -= 1;
-        if (keys['d']) dir.x += 1;
-
-        dir.normalize();
-        const forward = camera.getForwardRay().direction;
-        const right = BABYLON.Vector3.Cross(BABYLON.Axis.Y, forward).normalize();
-        const move = forward.scale(dir.z).add(right.scale(dir.x)).scale(0.15);
-        player.moveWithCollisions(move);
-    }
-
-    updateEnemies();
+function reload() {
+  if (isReloading || ammo === ammoMax) return;
+  isReloading = true;
+  reloadText.style.display = "block";
+  setTimeout(() => {
+    ammo = ammoMax;
+    isReloading = false;
+    reloadText.style.display = "none";
     updateHUD();
-    scene.render();
-});
+  }, reloadTime);
+}
 
-// Game Timer
-setInterval(() => {
-    if (!isDead && remainingTime > 0) remainingTime--;
-    if (remainingTime <= 0) {
-        deathScreen.style.display = "block";
-        deathScreen.textContent = "🕹️ Game Over";
+// ENEMIES (Simple cube enemies)
+const enemies = [];
+const enemySize = 1;
+const enemySpeed = 0.02;
+const enemyDamage = 20;
+
+function spawnEnemy() {
+  const enemy = BABYLON.MeshBuilder.CreateBox("enemy", { size: enemySize }, scene);
+  enemy.position = new BABYLON.Vector3(
+    (Math.random() - 0.5) * 40,
+    enemySize / 2,
+    (Math.random() - 0.5) * 40
+  );
+  enemy.health = 50;
+  enemies.push(enemy);
+}
+
+for (let i = 0; i < 5; i++) spawnEnemy();
+
+function updateEnemies() {
+  enemies.forEach((enemy, i) => {
+    if (!enemy || enemy.isDisposed()) return;
+
+    // Move towards player
+    const dir = player.position.subtract(enemy.position).normalize();
+    enemy.position.addInPlace(dir.scale(enemySpeed));
+
+    // Simple collision damage if close
+    if (BABYLON.Vector3.Distance(enemy.position, player.position) < 1.5 && !isDead) {
+      playerHealth -= enemyDamage * 0.01;
+      if (playerHealth <= 0) {
+        playerHealth = 0;
+        die();
+      }
+      updateHUD();
     }
-}, 1000);
 
-// Ammo Pickup
-scene.registerBeforeRender(() => {
-    if (BABYLON.Vector3.Distance(player.position, ammoBox.position) < 2) {
-        ammoCount = 10;
+    // Remove dead enemies
+    if (enemy.health <= 0) {
+      enemy.dispose();
+      enemies.splice(i, 1);
+      // Respawn enemy after delay
+      setTimeout(spawnEnemy, 5000);
     }
-});
+  });
+}
 
+function die() {
+  if (isDead) return;
+  isDead = true;
+  respawnTimer = respawnTime;
+  hud.innerHTML = `You died. Respawning in ${respawnTimer.toFixed(1)}s`;
+}
+
+function respawn() {
+  isDead = false;
+  playerHealth = maxHealth;
+  ammo = ammoMax;
+  player.position = new BABYLON.Vector3(0, 0.5, 0);
+  updateHUD();
+}
+
+// HUD Update
 function updateHUD() {
-    hud.innerHTML = `❤️ Health: ${Math.floor(playerHealth)}<br>🔫 Ammo: ${ammoCount}<br>⏳ Time: ${remainingTime}s`;
+  hud.innerHTML = `
+    Health: ${Math.round(playerHealth)}<br>
+    Ammo: ${ammo} / ${ammoMax}
+  `;
 }
 
-// Respawn
-function dieAndRespawn() {
-    isDead = true;
-    deathScreen.style.display = "block";
-    let countdown = respawnTime;
-    const interval = setInterval(() => {
-        deathScreen.textContent = `☠️ You Died\nRespawning in ${countdown--}...`;
-        if (countdown < 0) {
-            clearInterval(interval);
-            playerHealth = 100;
-            ammoCount = 10;
-            player.position = new BABYLON.Vector3(0, 2, 0);
-            isDead = false;
-            deathScreen.style.display = "none";
-        }
-    }, 1000);
-}
-
-// UI sliders
+// SETTINGS PANEL
 document.getElementById("settingsIcon").onclick = () => {
-    const panel = document.getElementById("settingsPanel");
-    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+  const panel = document.getElementById("settingsPanel");
+  panel.style.display = panel.style.display === "block" ? "none" : "block";
 };
-document.getElementById("resolutionScale").oninput = e => {
-    engine.setHardwareScalingLevel(1 / parseFloat(e.target.value));
+
+document.getElementById("resolutionScale").oninput = (e) => {
+  engine.setHardwareScalingLevel(1 / parseFloat(e.target.value));
 };
-document.getElementById("sensitivity").oninput = e => {
-    camera.angularSensibility = 2000 / parseFloat(e.target.value);
+
+document.getElementById("sensitivity").oninput = (e) => {
+  sensitivity = parseFloat(e.target.value);
 };
+
+// INPUT FOR SHOOTING AND RELOADING
+window.addEventListener("mousedown", (e) => {
+  if (e.button === 0) spawnBullet(); // left click shoots
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "r") reload();
+});
+
+// GAME LOOP
+engine.runRenderLoop(() => {
+  if (!isDead) {
+    updateMovementVector();
+    player.moveWithCollisions(moveVec);
+  } else {
+    respawnTimer -= engine.getDeltaTime() / 1000;
+    hud.innerHTML = `You died. Respawning in ${respawnTimer.toFixed(1)}s`;
+    if (respawnTimer <= 0) {
+      respawn();
+    }
+  }
+
+  // Move bullets and detect hits
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.position.addInPlace(b.forward.scale(bulletSpeed));
+
+    // Remove bullet if too far
+    if (BABYLON.Vector3.Distance(b.position, player.position) > 50) {
+      b.dispose();
+      bullets.splice(i, 1);
+      continue;
+    }
+
+    // Check collision with enemies
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const enemy = enemies[j];
+      if (enemy && BABYLON.Vector3.Distance(b.position, enemy.position) < enemySize / 1.5) {
+        enemy.health -= 25;
+        b.dispose();
+        bullets.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  updateEnemies();
+
+  scene.render();
+});
+
 window.addEventListener("resize", () => engine.resize());
+
+// Initialize HUD
+updateHUD();
