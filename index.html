@@ -1,107 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Babylon.js FPS Demo</title>
-<style>
-  html, body {
-    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
-    background: #202230; color: #eee; font-family: sans-serif;
-  }
-  #renderCanvas {
-    width: 100%; height: 100%; display: block; touch-action: none;
-  }
-  #settingsIcon, #settingsPanel, #joystickContainer {
-    position: absolute; z-index: 10;
-  }
-  #settingsIcon {
-    top: 10px; right: 10px; cursor: pointer; font-size: 1.8rem;
-    user-select: none;
-  }
-  #settingsPanel {
-    top: 50px; right: 10px;
-    background: #2a2d42; padding: 12px 15px; border-radius: 6px;
-    width: 220px;
-    display: none;
-    user-select: none;
-  }
-  #settingsPanel label {
-    display: flex; justify-content: space-between;
-    margin-bottom: 10px; font-size: 0.95rem;
-  }
-  #settingsPanel input[type=range] {
-    width: 120px;
-    margin-left: 10px;
-  }
-  #settingsPanel input[type=checkbox] {
-    margin-left: 8px;
-  }
-  #joystickContainer {
-    bottom: 20px; left: 20px;
-    width: 150px; height: 150px;
-    touch-action: none;
-  }
-  button {
-    background: #3b3f58;
-    border: none;
-    color: white;
-    padding: 8px 14px;
-    margin-top: 5px;
-    font-size: 1rem;
-    cursor: pointer;
-    border-radius: 5px;
-    user-select: none;
-  }
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  #ammoDisplay {
-    position: absolute;
-    top: 40px;
-    left: 10px;
-    font-size: 1rem;
-    z-index: 11;
-    user-select: none;
-  }
-  #loadingScreen {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: #202230; display: flex;
-    align-items: center; justify-content: center;
-    font-size: 2em; z-index: 20; color: white;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FPS Game</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="loadingScreen">Loading...</div>
-  <canvas id="renderCanvas"></canvas>
-
-  <div id="joystickContainer"></div>
-
-  <div id="settingsIcon" title="Settings">⚙️</div>
-
-  <div id="settingsPanel">
-    <label>
-      First Person
-      <input type="checkbox" id="toggleView" checked />
-    </label>
-    <label>
-      Resolution
-      <input type="range" id="resolutionScale" min="0.5" max="2" step="0.1" value="1" />
-    </label>
-    <label>
-      Sensitivity
-      <input type="range" id="sensitivity" min="0.1" max="3" step="0.1" value="1" />
-    </label>
-    <label>
-      Aim Assist
-      <input type="checkbox" id="aimAssistToggle" checked />
-    </label>
-  </div>
-
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
-  <script src="game.js"></script>
+  <canvas id="gameCanvas"></canvas>
+  <script type="module" src="game.js"></script>
 </body>
 </html>
