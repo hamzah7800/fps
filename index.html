@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>FPS with Terrain, Trees, Movement, Shooting, Health & Fall Damage</title>
+<title>FPS GAME</title>
 <style>
   body { margin: 0; overflow: hidden; font-family: sans-serif; background: #87ceeb; }
   #instructions {
@@ -59,16 +59,35 @@
     z-index: 15;
     touch-action: none;
   }
+  /* Shoot button */
+  #shootButton {
+    position: fixed;
+    bottom: 50px;
+    right: 50px;
+    width: 80px;
+    height: 80px;
+    background: rgba(255,0,0,0.6);
+    border: 3px solid white;
+    border-radius: 50%;
+    color: white;
+    font-size: 20px;
+    z-index: 20;
+    touch-action: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 </style>
 </head>
 <body>
-<div id="instructions">Click to play (WASD to move, mouse to look, Space to jump, click to shoot)</div>
+<div id="instructions">Click to play (WASD to move, mouse to look, Space to jump, click/tap to shoot)</div>
 
 <div id="healthBarContainer"><div id="healthBar"></div></div>
 <div id="deathOverlay"></div>
 <div id="deathText">You Died</div>
 
 <div id="joystick"></div>
+<button id="shootButton">Shoot</button>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/PointerLockControls.js"></script>
@@ -94,7 +113,6 @@
   const trees = [];
   const treeCollisionRadius = 1.2;
 
-  // Health variables
   const maxHealth = 100;
   let health = maxHealth;
   const healthBar = document.getElementById('healthBar');
@@ -102,7 +120,6 @@
   const deathText = document.getElementById('deathText');
   let isDead = false;
 
-  // For fall damage calculation
   let lastY = 0;
   let fallingStartY = null;
 
@@ -123,8 +140,8 @@
     terrainGeometry.rotateX(-Math.PI / 2);
 
     const simplex = new SimplexNoise();
-    const noiseFrequency = 0.1;
-    const noiseAmplitude = 3;
+    const noiseFrequency = 0.05;  // Lower frequency = smoother terrain
+    const noiseAmplitude = 1.5;   // Reduced amplitude = flatter hills
 
     for (let i = 0; i < terrainGeometry.attributes.position.count; i++) {
       const x = terrainGeometry.attributes.position.getX(i);
@@ -158,33 +175,31 @@
     controls = new THREE.PointerLockControls(camera, document.body);
     scene.add(controls.getObject());
 
-    const instructions = document.getElementById('instructions');
-    instructions.addEventListener('click', () => controls.lock());
-
+    document.getElementById('instructions').addEventListener('click', () => controls.lock());
     controls.addEventListener('lock', () => {
-      instructions.style.display = 'none';
+      document.getElementById('instructions').style.display = 'none';
       if (isDead) resetGame();
     });
-
     controls.addEventListener('unlock', () => {
-      instructions.style.display = '';
+      document.getElementById('instructions').style.display = '';
     });
 
     controls.getObject().position.set(0, getHeightAt(0, 0) + 1.8, 0);
-
     lastY = controls.getObject().position.y;
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
     document.addEventListener('mousedown', () => {
-      if (!controls.isLocked || isDead) return;
-      shootBullet();
+      if (controls.isLocked && !isDead) shootBullet();
+    });
+
+    document.getElementById('shootButton').addEventListener('touchstart', () => {
+      if (controls.isLocked && !isDead) shootBullet();
     });
 
     window.addEventListener('resize', onWindowResize);
 
-    // Initialize nipple.js joystick
     const joystick = nipplejs.create({
       zone: document.getElementById('joystick'),
       mode: 'static',
@@ -192,30 +207,17 @@
       color: 'white',
       size: 150,
     });
-
     joystick.on('move', (evt, data) => {
       if (!data) return;
-
-      // Reset all directions
       moveForward = moveBackward = moveLeft = moveRight = false;
-
       const angle = data.angle ? data.angle.degree : 0;
       const distance = data.distance;
-
-      if (distance < 10) return; // dead zone
-
-      // Map joystick direction to WASD movement booleans
-      if (angle >= 45 && angle < 135) {
-        moveForward = true;
-      } else if (angle >= 135 && angle < 225) {
-        moveLeft = true;
-      } else if (angle >= 225 && angle < 315) {
-        moveBackward = true;
-      } else {
-        moveRight = true;
-      }
+      if (distance < 10) return;
+      if (angle >= 45 && angle < 135) moveForward = true;
+      else if (angle >= 135 && angle < 225) moveLeft = true;
+      else if (angle >= 225 && angle < 315) moveBackward = true;
+      else moveRight = true;
     });
-
     joystick.on('end', () => {
       moveForward = moveBackward = moveLeft = moveRight = false;
     });
@@ -224,12 +226,10 @@
   function addTrees(amount) {
     const treeGeometry = new THREE.ConeGeometry(0.8, 3, 8);
     const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 });
-
     for (let i = 0; i < amount; i++) {
       const x = (Math.random() - 0.5) * terrainSize;
       const z = (Math.random() - 0.5) * terrainSize;
       const y = getHeightAt(x, z);
-
       const tree = new THREE.Mesh(treeGeometry, treeMaterial);
       tree.position.set(x, y + 1.5, z);
       tree.castShadow = true;
@@ -242,50 +242,34 @@
     const half = terrainSize / 2;
     const localX = ((x + half) / terrainSize) * segments;
     const localZ = ((z + half) / terrainSize) * segments;
-
-    const x1 = Math.floor(localX);
-    const x2 = Math.min(x1 + 1, segments);
-    const z1 = Math.floor(localZ);
-    const z2 = Math.min(z1 + 1, segments);
-
-    function idx(ix, iz) { return ix + iz * (segments + 1); }
-
+    const x1 = Math.floor(localX), x2 = Math.min(x1 + 1, segments);
+    const z1 = Math.floor(localZ), z2 = Math.min(z1 + 1, segments);
+    const idx = (ix, iz) => ix + iz * (segments + 1);
     const h11 = terrainGeometry.attributes.position.getY(idx(x1, z1));
     const h21 = terrainGeometry.attributes.position.getY(idx(x2, z1));
     const h12 = terrainGeometry.attributes.position.getY(idx(x1, z2));
     const h22 = terrainGeometry.attributes.position.getY(idx(x2, z2));
-
-    const tx = localX - x1;
-    const tz = localZ - z1;
-
-    return (1 - tx) * (1 - tz) * h11 +
-           tx * (1 - tz) * h21 +
-           (1 - tx) * tz * h12 +
-           tx * tz * h22;
+    const tx = localX - x1, tz = localZ - z1;
+    return (1 - tx) * (1 - tz) * h11 + tx * (1 - tz) * h21 + (1 - tx) * tz * h12 + tx * tz * h22;
   }
 
   function shootBullet() {
     const startPos = controls.getObject().position.clone();
     const shootDir = new THREE.Vector3();
     camera.getWorldDirection(shootDir);
-
     raycaster.set(startPos, shootDir);
-
     const intersects = raycaster.intersectObject(terrain);
 
-    const bulletGeo = new THREE.SphereGeometry(0.05, 8, 8);
-    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const bulletGeo = new THREE.SphereGeometry(0.1, 12, 12);
+    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
     const bullet = new THREE.Mesh(bulletGeo, bulletMat);
     bullet.position.copy(startPos);
     scene.add(bullet);
     bullets.push({ mesh: bullet, direction: shootDir.clone() });
 
-    if (intersects.length > 0) {
-      const hit = intersects[0];
-      if (hit.distance < 100) {
-        velocity.y = 15;
-        canJump = false;
-      }
+    if (intersects.length > 0 && intersects[0].distance < 100) {
+      velocity.y = 15;
+      canJump = false;
     }
   }
 
@@ -293,59 +277,27 @@
     for (const tree of trees) {
       const dx = newPos.x - tree.position.x;
       const dz = newPos.z - tree.position.z;
-      if (Math.sqrt(dx*dx + dz*dz) < treeCollisionRadius) {
-        return true;
-      }
+      if (Math.sqrt(dx*dx + dz*dz) < treeCollisionRadius) return true;
     }
     return false;
   }
 
-  function onKeyDown(event) {
-    switch (event.code) {
-      case 'ArrowUp':
-      case 'KeyW':
-        moveForward = true;
-        break;
-      case 'ArrowLeft':
-      case 'KeyA':
-        moveLeft = true;
-        break;
-      case 'ArrowDown':
-      case 'KeyS':
-        moveBackward = true;
-        break;
-      case 'ArrowRight':
-      case 'KeyD':
-        moveRight = true;
-        break;
-      case 'Space':
-        if (canJump && !isDead) {
-          velocity.y += 10;
-          canJump = false;
-        }
-        break;
+  function onKeyDown(e) {
+    if (e.code === 'KeyW' || e.code === 'ArrowUp') moveForward = true;
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') moveLeft = true;
+    if (e.code === 'KeyS' || e.code === 'ArrowDown') moveBackward = true;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') moveRight = true;
+    if (e.code === 'Space' && canJump && !isDead) {
+      velocity.y += 10;
+      canJump = false;
     }
   }
 
-  function onKeyUp(event) {
-    switch (event.code) {
-      case 'ArrowUp':
-      case 'KeyW':
-        moveForward = false;
-        break;
-      case 'ArrowLeft':
-      case 'KeyA':
-        moveLeft = false;
-        break;
-      case 'ArrowDown':
-      case 'KeyS':
-        moveBackward = false;
-        break;
-      case 'ArrowRight':
-      case 'KeyD':
-        moveRight = false;
-        break;
-    }
+  function onKeyUp(e) {
+    if (e.code === 'KeyW' || e.code === 'ArrowUp') moveForward = false;
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') moveLeft = false;
+    if (e.code === 'KeyS' || e.code === 'ArrowDown') moveBackward = false;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') moveRight = false;
   }
 
   function onWindowResize() {
@@ -360,104 +312,68 @@
     isDead = false;
     deathOverlay.style.background = 'rgba(255,0,0,0)';
     deathText.style.opacity = 0;
-    controls.getObject().position.set(0, getHeightAt(0, 0) + 1.8, 0);
-    velocity.set(0, 0, 0);
+    controls.getObject().position.set(0, getHeightAt(0,0)+1.8, 0);
+    velocity.set(0,0,0);
     fallingStartY = null;
   }
 
   function updateHealthBar() {
     const percent = Math.max(health, 0) / maxHealth * 100;
     healthBar.style.width = percent + '%';
-    if (percent > 60) healthBar.style.background = '#4caf50';
-    else if (percent > 30) healthBar.style.background = '#ff9800';
-    else healthBar.style.background = '#f44336';
+    healthBar.style.background = percent > 60 ? '#4caf50' : percent > 30 ? '#ff9800' : '#f44336';
   }
 
   function animate() {
     requestAnimationFrame(animate);
-
     if (!controls.isLocked) {
       renderer.render(scene, camera);
       return;
     }
-
     const time = performance.now();
     const delta = (time - prevTime) / 1000;
-
-    // Movement speed and fix for W/S swapped:
-    const speed = 5; // slower speed
-
-    let moveX = 0;
-    let moveZ = 0;
-
-    // Fix swapped W and S by swapping signs here:
+    const speed = 5;
+    let moveX = 0, moveZ = 0;
     if (moveForward) moveZ += 1;
     if (moveBackward) moveZ -= 1;
     if (moveLeft) moveX -= 1;
     if (moveRight) moveX += 1;
-
-    // Normalize to avoid diagonal speed boost
-    const moveVector = new THREE.Vector3(moveX, 0, moveZ);
-    if (moveVector.length() > 0) {
-      moveVector.normalize();
-    }
-
-    // Calculate camera directions
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
-
-    const right = new THREE.Vector3();
+    const moveVector = new THREE.Vector3(moveX, 0, moveZ).normalize();
+    const forward = new THREE.Vector3(), right = new THREE.Vector3();
+    camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
     let newPosition = controls.getObject().position.clone();
-    newPosition.add(forward.clone().multiplyScalar(moveVector.z * speed * delta));
-    newPosition.add(right.clone().multiplyScalar(moveVector.x * speed * delta));
-
-    // Check collision with trees before applying position
+    newPosition.add(forward.multiplyScalar(moveVector.z * speed * delta));
+    newPosition.add(right.multiplyScalar(moveVector.x * speed * delta));
     if (!checkTreeCollision(newPosition)) {
       controls.getObject().position.x = newPosition.x;
       controls.getObject().position.z = newPosition.z;
     }
-
-    // Gravity and jumping
-    velocity.y -= 30 * delta; // gravity
-
+    velocity.y -= 30 * delta;
     controls.getObject().position.y += velocity.y * delta;
-
-    // Prevent falling through terrain
     const terrainHeight = getHeightAt(controls.getObject().position.x, controls.getObject().position.z) + 1.8;
     if (controls.getObject().position.y < terrainHeight) {
-      if (!canJump) {
-        // Calculate fall damage if falling
-        if (fallingStartY !== null) {
-          const fallDistance = fallingStartY - controls.getObject().position.y;
-          if (fallDistance > 4) {
-            const damage = (fallDistance - 4) * 10;
-            health -= damage;
-            updateHealthBar();
-            if (health <= 0) {
-              isDead = true;
-              deathOverlay.style.background = 'rgba(255,0,0,0.6)';
-              deathText.style.opacity = 1;
-              controls.unlock();
-            }
+      if (!canJump && fallingStartY !== null) {
+        const fallDistance = fallingStartY - controls.getObject().position.y;
+        if (fallDistance > 4) {
+          const damage = (fallDistance - 4) * 10;
+          health -= damage;
+          updateHealthBar();
+          if (health <= 0) {
+            isDead = true;
+            deathOverlay.style.background = 'rgba(255,0,0,0.6)';
+            deathText.style.opacity = 1;
+            controls.unlock();
           }
-          fallingStartY = null;
         }
+        fallingStartY = null;
       }
       velocity.y = 0;
       controls.getObject().position.y = terrainHeight;
       canJump = true;
     } else {
-      if (velocity.y < 0 && fallingStartY === null) {
-        fallingStartY = controls.getObject().position.y;
-      }
+      if (velocity.y < 0 && fallingStartY === null) fallingStartY = controls.getObject().position.y;
       canJump = false;
     }
-
-    // Update bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
       b.mesh.position.add(b.direction.clone().multiplyScalar(bulletSpeed * delta));
@@ -466,9 +382,7 @@
         bullets.splice(i, 1);
       }
     }
-
     prevTime = time;
-
     renderer.render(scene, camera);
   }
 </script>
