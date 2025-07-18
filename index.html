@@ -1,390 +1,189 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>FPS GAME</title>
-<style>
-  body { margin: 0; overflow: hidden; font-family: sans-serif; background: #87ceeb; }
-  #instructions {
-    position: absolute; width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    background-color: rgba(0,0,0,0.75); color: #fff;
-    font-size: 20px; cursor: pointer; user-select: none; z-index: 10;
-  }
-  #healthBarContainer {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    width: 200px;
-    height: 25px;
-    background: #333;
-    border: 2px solid #000;
-    border-radius: 5px;
-    z-index: 11;
-  }
-  #healthBar {
-    width: 100%;
-    height: 100%;
-    background: #4caf50;
-    border-radius: 3px;
-    transition: width 0.3s ease;
-  }
-  #deathOverlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255, 0, 0, 0);
-    pointer-events: none;
-    transition: background 1s ease;
-    z-index: 20;
-  }
-  #deathText {
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    color: #fff;
-    font-size: 48px;
-    font-weight: bold;
-    opacity: 0;
-    pointer-events: none;
-    user-select: none;
-    z-index: 21;
-  }
-  /* Joystick container */
-  #joystick {
-    position: fixed;
-    bottom: 50px;
-    left: 50px;
-    width: 150px;
-    height: 150px;
-    z-index: 15;
-    touch-action: none;
-  }
-  /* Shoot button */
-  #shootButton {
-    position: fixed;
-    bottom: 50px;
-    right: 50px;
-    width: 80px;
-    height: 80px;
-    background: rgba(255,0,0,0.6);
-    border: 3px solid white;
-    border-radius: 50%;
-    color: white;
-    font-size: 20px;
-    z-index: 20;
-    touch-action: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>FPS Game with Joystick and Grass</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      touch-action: none;
+    }
+    canvas { display: block; }
+
+    #joystick-container {
+      position: absolute;
+      bottom: 80px;
+      left: 80px;
+      width: 150px;
+      height: 150px;
+      z-index: 10;
+    }
+
+    #shoot-button {
+      position: absolute;
+      bottom: 100px;
+      right: 60px;
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 0, 0, 0.5);
+      border-radius: 50%;
+      border: 2px solid white;
+      font-size: 18px;
+      color: white;
+      text-align: center;
+      line-height: 80px;
+      user-select: none;
+      z-index: 10;
+    }
+  </style>
 </head>
 <body>
-<div id="instructions">Click to play (WASD to move, mouse to look, Space to jump, click/tap to shoot)</div>
+  <div id="joystick-container"></div>
+  <div id="shoot-button">Shoot</div>
 
-<div id="healthBarContainer"><div id="healthBar"></div></div>
-<div id="deathOverlay"></div>
-<div id="deathText">You Died</div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
 
-<div id="joystick"></div>
-<button id="shootButton">Shoot</button>
-
-<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/PointerLockControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
-
-<script>
-  let camera, scene, renderer, controls;
-  let velocity = new THREE.Vector3();
-  let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-  let canJump = false;
-  let prevTime = performance.now();
-  const bullets = [];
-  const bulletSpeed = 50;
-
-  const terrainSize = 200;
-  const segments = 100;
-  let terrainGeometry;
-  let terrain;
-
-  const raycaster = new THREE.Raycaster();
-
-  const trees = [];
-  const treeCollisionRadius = 1.2;
-
-  const maxHealth = 100;
-  let health = maxHealth;
-  const healthBar = document.getElementById('healthBar');
-  const deathOverlay = document.getElementById('deathOverlay');
-  const deathText = document.getElementById('deathText');
-  let isDead = false;
-
-  let lastY = 0;
-  let fallingStartY = null;
-
-  init();
-  animate();
-
-  function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+  <script>
+    let scene = new THREE.Scene();
+    let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    let renderer = new THREE.WebGLRenderer({antialias: true});
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    terrainGeometry = new THREE.PlaneGeometry(terrainSize, terrainSize, segments, segments);
-    terrainGeometry.rotateX(-Math.PI / 2);
+    // Lights
+    let light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(50, 50, 50);
+    scene.add(light);
 
-    const simplex = new SimplexNoise();
-    const noiseFrequency = 0.05;  // Lower frequency = smoother terrain
-    const noiseAmplitude = 1.5;   // Reduced amplitude = flatter hills
-
-    for (let i = 0; i < terrainGeometry.attributes.position.count; i++) {
-      const x = terrainGeometry.attributes.position.getX(i);
-      const z = terrainGeometry.attributes.position.getZ(i);
-      const y = simplex.noise2D(x * noiseFrequency, z * noiseFrequency) * noiseAmplitude;
-      terrainGeometry.attributes.position.setY(i, y);
-    }
-    terrainGeometry.computeVertexNormals();
-
+    // Grass Texture
     const loader = new THREE.TextureLoader();
-    const grassTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
-    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(terrainSize / 10, terrainSize / 10);
+    const grassTexture = loader.load('https://threejs.org/examples/textures/grasslight-big.jpg');
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(100, 100);
 
-    const terrainMaterial = new THREE.MeshStandardMaterial({ map: grassTexture });
-    terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
-    terrain.receiveShadow = true;
-    scene.add(terrain);
+    // Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(1000, 1000),
+      new THREE.MeshLambertMaterial({ map: grassTexture })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-    hemiLight.position.set(0, 200, 0);
-    scene.add(hemiLight);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(100, 200, 100);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
-
-    addTrees(150);
-
-    controls = new THREE.PointerLockControls(camera, document.body);
+    // Player
+    let controls = new THREE.PointerLockControls(camera, renderer.domElement);
     scene.add(controls.getObject());
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+    let canJump = false;
 
-    document.getElementById('instructions').addEventListener('click', () => controls.lock());
-    controls.addEventListener('lock', () => {
-      document.getElementById('instructions').style.display = 'none';
-      if (isDead) resetGame();
-    });
-    controls.addEventListener('unlock', () => {
-      document.getElementById('instructions').style.display = '';
-    });
+    document.body.addEventListener('click', () => controls.lock());
+    controls.addEventListener('lock', () => {});
+    controls.addEventListener('unlock', () => {});
 
-    controls.getObject().position.set(0, getHeightAt(0, 0) + 1.8, 0);
-    lastY = controls.getObject().position.y;
+    // Bullets
+    const bullets = [];
 
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
+    function shootBullet() {
+      let bullet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      bullet.position.copy(camera.position);
+      bullet.quaternion.copy(camera.quaternion);
+      scene.add(bullet);
 
-    document.addEventListener('mousedown', () => {
-      if (controls.isLocked && !isDead) shootBullet();
-    });
+      let dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      bullets.push({ mesh: bullet, velocity: dir.multiplyScalar(1) });
+    }
 
-    document.getElementById('shootButton').addEventListener('touchstart', () => {
-      if (controls.isLocked && !isDead) shootBullet();
-    });
+    // Mobile Shoot Button
+    document.getElementById('shoot-button').addEventListener('touchstart', shootBullet);
 
-    window.addEventListener('resize', onWindowResize);
-
+    // Joystick
     const joystick = nipplejs.create({
-      zone: document.getElementById('joystick'),
+      zone: document.getElementById('joystick-container'),
       mode: 'static',
-      position: { left: '75px', top: '75px' },
-      color: 'white',
-      size: 150,
+      position: { left: '50%', top: '50%' },
+      color: 'white'
     });
+
+    let joystickMove = { forward: 0, right: 0 };
+
     joystick.on('move', (evt, data) => {
-      if (!data) return;
-      moveForward = moveBackward = moveLeft = moveRight = false;
-      const angle = data.angle ? data.angle.degree : 0;
+      const angle = data.angle.degree;
       const distance = data.distance;
-      if (distance < 10) return;
-      if (angle >= 45 && angle < 135) moveForward = true;
-      else if (angle >= 135 && angle < 225) moveLeft = true;
-      else if (angle >= 225 && angle < 315) moveBackward = true;
-      else moveRight = true;
+      joystickMove.forward = Math.cos(angle * Math.PI / 180) * distance / 50;
+      joystickMove.right = Math.sin(angle * Math.PI / 180) * distance / 50;
     });
+
     joystick.on('end', () => {
-      moveForward = moveBackward = moveLeft = moveRight = false;
+      joystickMove.forward = 0;
+      joystickMove.right = 0;
     });
-  }
 
-  function addTrees(amount) {
-    const treeGeometry = new THREE.ConeGeometry(0.8, 3, 8);
-    const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 });
-    for (let i = 0; i < amount; i++) {
-      const x = (Math.random() - 0.5) * terrainSize;
-      const z = (Math.random() - 0.5) * terrainSize;
-      const y = getHeightAt(x, z);
-      const tree = new THREE.Mesh(treeGeometry, treeMaterial);
-      tree.position.set(x, y + 1.5, z);
-      tree.castShadow = true;
-      scene.add(tree);
-      trees.push(tree);
-    }
-  }
+    // Controls
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.code] = true);
+    document.addEventListener('keyup', e => keys[e.code] = false);
 
-  function getHeightAt(x, z) {
-    const half = terrainSize / 2;
-    const localX = ((x + half) / terrainSize) * segments;
-    const localZ = ((z + half) / terrainSize) * segments;
-    const x1 = Math.floor(localX), x2 = Math.min(x1 + 1, segments);
-    const z1 = Math.floor(localZ), z2 = Math.min(z1 + 1, segments);
-    const idx = (ix, iz) => ix + iz * (segments + 1);
-    const h11 = terrainGeometry.attributes.position.getY(idx(x1, z1));
-    const h21 = terrainGeometry.attributes.position.getY(idx(x2, z1));
-    const h12 = terrainGeometry.attributes.position.getY(idx(x1, z2));
-    const h22 = terrainGeometry.attributes.position.getY(idx(x2, z2));
-    const tx = localX - x1, tz = localZ - z1;
-    return (1 - tx) * (1 - tz) * h11 + tx * (1 - tz) * h21 + (1 - tx) * tz * h12 + tx * tz * h22;
-  }
+    // Animation
+    let prevTime = performance.now();
+    function animate() {
+      requestAnimationFrame(animate);
 
-  function shootBullet() {
-    const startPos = controls.getObject().position.clone();
-    const shootDir = new THREE.Vector3();
-    camera.getWorldDirection(shootDir);
-    raycaster.set(startPos, shootDir);
-    const intersects = raycaster.intersectObject(terrain);
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
 
-    const bulletGeo = new THREE.SphereGeometry(0.1, 12, 12);
-    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-    const bullet = new THREE.Mesh(bulletGeo, bulletMat);
-    bullet.position.copy(startPos);
-    scene.add(bullet);
-    bullets.push({ mesh: bullet, direction: shootDir.clone() });
+      velocity.x -= velocity.x * 10.0 * delta;
+      velocity.z -= velocity.z * 10.0 * delta;
+      velocity.y -= 9.8 * delta; // gravity
 
-    if (intersects.length > 0 && intersects[0].distance < 100) {
-      velocity.y = 15;
-      canJump = false;
-    }
-  }
+      direction.z = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0) + joystickMove.forward;
+      direction.x = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joystickMove.right;
+      direction.normalize();
 
-  function checkTreeCollision(newPos) {
-    for (const tree of trees) {
-      const dx = newPos.x - tree.position.x;
-      const dz = newPos.z - tree.position.z;
-      if (Math.sqrt(dx*dx + dz*dz) < treeCollisionRadius) return true;
-    }
-    return false;
-  }
+      if (direction.length() > 0) {
+        velocity.z -= direction.z * 50.0 * delta;
+        velocity.x -= direction.x * 50.0 * delta;
+      }
 
-  function onKeyDown(e) {
-    if (e.code === 'KeyW' || e.code === 'ArrowUp') moveForward = true;
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') moveLeft = true;
-    if (e.code === 'KeyS' || e.code === 'ArrowDown') moveBackward = true;
-    if (e.code === 'KeyD' || e.code === 'ArrowRight') moveRight = true;
-    if (e.code === 'Space' && canJump && !isDead) {
-      velocity.y += 10;
-      canJump = false;
-    }
-  }
+      controls.moveRight(-velocity.x * delta);
+      controls.moveForward(-velocity.z * delta);
+      controls.getObject().position.y += velocity.y * delta;
 
-  function onKeyUp(e) {
-    if (e.code === 'KeyW' || e.code === 'ArrowUp') moveForward = false;
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') moveLeft = false;
-    if (e.code === 'KeyS' || e.code === 'ArrowDown') moveBackward = false;
-    if (e.code === 'KeyD' || e.code === 'ArrowRight') moveRight = false;
-  }
+      if (controls.getObject().position.y < 2) {
+        velocity.y = 0;
+        controls.getObject().position.y = 2;
+        canJump = true;
+      }
 
-  function onWindowResize() {
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }
-
-  function resetGame() {
-    health = maxHealth;
-    updateHealthBar();
-    isDead = false;
-    deathOverlay.style.background = 'rgba(255,0,0,0)';
-    deathText.style.opacity = 0;
-    controls.getObject().position.set(0, getHeightAt(0,0)+1.8, 0);
-    velocity.set(0,0,0);
-    fallingStartY = null;
-  }
-
-  function updateHealthBar() {
-    const percent = Math.max(health, 0) / maxHealth * 100;
-    healthBar.style.width = percent + '%';
-    healthBar.style.background = percent > 60 ? '#4caf50' : percent > 30 ? '#ff9800' : '#f44336';
-  }
-
-  function animate() {
-    requestAnimationFrame(animate);
-    if (!controls.isLocked) {
-      renderer.render(scene, camera);
-      return;
-    }
-    const time = performance.now();
-    const delta = (time - prevTime) / 1000;
-    const speed = 5;
-    let moveX = 0, moveZ = 0;
-    if (moveForward) moveZ += 1;
-    if (moveBackward) moveZ -= 1;
-    if (moveLeft) moveX -= 1;
-    if (moveRight) moveX += 1;
-    const moveVector = new THREE.Vector3(moveX, 0, moveZ).normalize();
-    const forward = new THREE.Vector3(), right = new THREE.Vector3();
-    camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    let newPosition = controls.getObject().position.clone();
-    newPosition.add(forward.multiplyScalar(moveVector.z * speed * delta));
-    newPosition.add(right.multiplyScalar(moveVector.x * speed * delta));
-    if (!checkTreeCollision(newPosition)) {
-      controls.getObject().position.x = newPosition.x;
-      controls.getObject().position.z = newPosition.z;
-    }
-    velocity.y -= 30 * delta;
-    controls.getObject().position.y += velocity.y * delta;
-    const terrainHeight = getHeightAt(controls.getObject().position.x, controls.getObject().position.z) + 1.8;
-    if (controls.getObject().position.y < terrainHeight) {
-      if (!canJump && fallingStartY !== null) {
-        const fallDistance = fallingStartY - controls.getObject().position.y;
-        if (fallDistance > 4) {
-          const damage = (fallDistance - 4) * 10;
-          health -= damage;
-          updateHealthBar();
-          if (health <= 0) {
-            isDead = true;
-            deathOverlay.style.background = 'rgba(255,0,0,0.6)';
-            deathText.style.opacity = 1;
-            controls.unlock();
-          }
+      // Bullets update
+      bullets.forEach((b, i) => {
+        b.mesh.position.add(b.velocity.clone().multiplyScalar(delta * 30));
+        if (b.mesh.position.length() > 500) {
+          scene.remove(b.mesh);
+          bullets.splice(i, 1);
         }
-        fallingStartY = null;
-      }
-      velocity.y = 0;
-      controls.getObject().position.y = terrainHeight;
-      canJump = true;
-    } else {
-      if (velocity.y < 0 && fallingStartY === null) fallingStartY = controls.getObject().position.y;
-      canJump = false;
+      });
+
+      renderer.render(scene, camera);
+      prevTime = time;
     }
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      b.mesh.position.add(b.direction.clone().multiplyScalar(bulletSpeed * delta));
-      if (b.mesh.position.distanceTo(controls.getObject().position) > 100) {
-        scene.remove(b.mesh);
-        bullets.splice(i, 1);
-      }
-    }
-    prevTime = time;
-    renderer.render(scene, camera);
-  }
-</script>
+    animate();
+
+    // Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
