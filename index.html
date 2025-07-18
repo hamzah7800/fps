@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta charset="UTF-8">
-  <title>Touch Joystick Game</title>
+  <title>Three.js Mobile Joystick Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #111;
+      background: #000;
     }
     canvas {
       display: block;
-      background: #222;
     }
 
     #joystick {
@@ -22,102 +21,134 @@
       left: 20px;
       width: 120px;
       height: 120px;
+      background: rgba(255,255,255,0.1);
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.1);
       touch-action: none;
     }
 
     #stick {
+      width: 60px;
+      height: 60px;
+      background: rgba(255,255,255,0.4);
+      border-radius: 50%;
       position: absolute;
       left: 30px;
       top: 30px;
-      width: 60px;
-      height: 60px;
-      background: rgba(255, 255, 255, 0.4);
-      border-radius: 50%;
     }
   </style>
 </head>
 <body>
 
-<canvas id="game"></canvas>
-
 <div id="joystick">
   <div id="stick"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+let scene, camera, renderer;
+let player, ground;
+let velocity = new THREE.Vector3(0, 0, 0);
+const speed = 0.1;
 
-let player = { x: canvas.width/2, y: canvas.height/2, size: 30, color: "#0f0", speed: 3 };
-let velocity = { x: 0, y: 0 };
+init();
+animate();
 
-// Joystick elements
-const joystick = document.getElementById("joystick");
-const stick = document.getElementById("stick");
+function init() {
+  // Scene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x222222);
 
-let dragging = false;
-let joyStart = { x: 0, y: 0 };
+  // Camera
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 5, 10);
 
-joystick.addEventListener("touchstart", (e) => {
-  dragging = true;
-  const touch = e.touches[0];
-  joyStart = { x: touch.clientX, y: touch.clientY };
-}, false);
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-joystick.addEventListener("touchmove", (e) => {
-  if (!dragging) return;
-  e.preventDefault();
-  const touch = e.touches[0];
-  const dx = touch.clientX - joyStart.x;
-  const dy = touch.clientY - joyStart.y;
-  const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 40);
+  // Lighting
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 7.5);
+  scene.add(light);
 
-  const angle = Math.atan2(dy, dx);
-  const offsetX = dist * Math.cos(angle);
-  const offsetY = dist * Math.sin(angle);
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(100, 100);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
 
-  stick.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+  // Player
+  const playerGeo = new THREE.BoxGeometry(1, 1, 1);
+  const playerMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+  player = new THREE.Mesh(playerGeo, playerMat);
+  player.position.y = 0.5;
+  scene.add(player);
 
-  velocity.x = Math.cos(angle) * (dist / 40) * player.speed;
-  velocity.y = Math.sin(angle) * (dist / 40) * player.speed;
-}, { passive: false });
+  window.addEventListener('resize', onWindowResize, false);
 
-joystick.addEventListener("touchend", () => {
-  dragging = false;
-  stick.style.transform = `translate(0px, 0px)`;
-  velocity.x = 0;
-  velocity.y = 0;
-}, false);
-
-// Game loop
-function update() {
-  player.x += velocity.x;
-  player.y += velocity.y;
-
-  // Stay in bounds
-  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
-  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+  setupJoystick();
 }
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Draw player
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x, player.y, player.size, player.size);
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
+function animate() {
+  requestAnimationFrame(animate);
+
+  player.position.add(velocity);
+
+  // Camera follow
+  camera.position.x = player.position.x;
+  camera.position.z = player.position.z + 10;
+  camera.lookAt(player.position);
+
+  renderer.render(scene, camera);
 }
 
-loop();
+// Joystick logic
+function setupJoystick() {
+  const joystick = document.getElementById('joystick');
+  const stick = document.getElementById('stick');
+  let dragging = false;
+  let origin = { x: 0, y: 0 };
+
+  joystick.addEventListener("touchstart", (e) => {
+    const touch = e.touches[0];
+    origin = { x: touch.clientX, y: touch.clientY };
+    dragging = true;
+  });
+
+  joystick.addEventListener("touchmove", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - origin.x;
+    const dy = touch.clientY - origin.y;
+    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 40);
+    const angle = Math.atan2(dy, dx);
+
+    const offsetX = dist * Math.cos(angle);
+    const offsetY = dist * Math.sin(angle);
+
+    stick.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+
+    velocity.x = Math.cos(angle) * (dist / 40) * speed;
+    velocity.z = Math.sin(angle) * (dist / 40) * speed;
+  }, { passive: false });
+
+  joystick.addEventListener("touchend", () => {
+    dragging = false;
+    stick.style.transform = `translate(0px, 0px)`;
+    velocity.x = 0;
+    velocity.z = 0;
+  });
+}
 </script>
 
 </body>
