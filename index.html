@@ -1,189 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>FPS Game with Joystick and Grass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
+  <title>Touch Joystick Game</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
+      background: #111;
+    }
+    canvas {
+      display: block;
+      background: #222;
+    }
+
+    #joystick {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
       touch-action: none;
     }
-    canvas { display: block; }
 
-    #joystick-container {
+    #stick {
       position: absolute;
-      bottom: 80px;
-      left: 80px;
-      width: 150px;
-      height: 150px;
-      z-index: 10;
-    }
-
-    #shoot-button {
-      position: absolute;
-      bottom: 100px;
-      right: 60px;
-      width: 80px;
-      height: 80px;
-      background: rgba(255, 0, 0, 0.5);
+      left: 30px;
+      top: 30px;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.4);
       border-radius: 50%;
-      border: 2px solid white;
-      font-size: 18px;
-      color: white;
-      text-align: center;
-      line-height: 80px;
-      user-select: none;
-      z-index: 10;
     }
   </style>
 </head>
 <body>
-  <div id="joystick-container"></div>
-  <div id="shoot-button">Shoot</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
+<canvas id="game"></canvas>
 
-  <script>
-    let scene = new THREE.Scene();
-    let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    let renderer = new THREE.WebGLRenderer({antialias: true});
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+<div id="joystick">
+  <div id="stick"></div>
+</div>
 
-    // Lights
-    let light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(50, 50, 50);
-    scene.add(light);
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-    // Grass Texture
-    const loader = new THREE.TextureLoader();
-    const grassTexture = loader.load('https://threejs.org/examples/textures/grasslight-big.jpg');
-    grassTexture.wrapS = THREE.RepeatWrapping;
-    grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(100, 100);
+let player = { x: canvas.width/2, y: canvas.height/2, size: 30, color: "#0f0", speed: 3 };
+let velocity = { x: 0, y: 0 };
 
-    // Ground
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(1000, 1000),
-      new THREE.MeshLambertMaterial({ map: grassTexture })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
+// Joystick elements
+const joystick = document.getElementById("joystick");
+const stick = document.getElementById("stick");
 
-    // Player
-    let controls = new THREE.PointerLockControls(camera, renderer.domElement);
-    scene.add(controls.getObject());
-    let velocity = new THREE.Vector3();
-    let direction = new THREE.Vector3();
-    let canJump = false;
+let dragging = false;
+let joyStart = { x: 0, y: 0 };
 
-    document.body.addEventListener('click', () => controls.lock());
-    controls.addEventListener('lock', () => {});
-    controls.addEventListener('unlock', () => {});
+joystick.addEventListener("touchstart", (e) => {
+  dragging = true;
+  const touch = e.touches[0];
+  joyStart = { x: touch.clientX, y: touch.clientY };
+}, false);
 
-    // Bullets
-    const bullets = [];
+joystick.addEventListener("touchmove", (e) => {
+  if (!dragging) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const dx = touch.clientX - joyStart.x;
+  const dy = touch.clientY - joyStart.y;
+  const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 40);
 
-    function shootBullet() {
-      let bullet = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xff0000 })
-      );
-      bullet.position.copy(camera.position);
-      bullet.quaternion.copy(camera.quaternion);
-      scene.add(bullet);
+  const angle = Math.atan2(dy, dx);
+  const offsetX = dist * Math.cos(angle);
+  const offsetY = dist * Math.sin(angle);
 
-      let dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      bullets.push({ mesh: bullet, velocity: dir.multiplyScalar(1) });
-    }
+  stick.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
 
-    // Mobile Shoot Button
-    document.getElementById('shoot-button').addEventListener('touchstart', shootBullet);
+  velocity.x = Math.cos(angle) * (dist / 40) * player.speed;
+  velocity.y = Math.sin(angle) * (dist / 40) * player.speed;
+}, { passive: false });
 
-    // Joystick
-    const joystick = nipplejs.create({
-      zone: document.getElementById('joystick-container'),
-      mode: 'static',
-      position: { left: '50%', top: '50%' },
-      color: 'white'
-    });
+joystick.addEventListener("touchend", () => {
+  dragging = false;
+  stick.style.transform = `translate(0px, 0px)`;
+  velocity.x = 0;
+  velocity.y = 0;
+}, false);
 
-    let joystickMove = { forward: 0, right: 0 };
+// Game loop
+function update() {
+  player.x += velocity.x;
+  player.y += velocity.y;
 
-    joystick.on('move', (evt, data) => {
-      const angle = data.angle.degree;
-      const distance = data.distance;
-      joystickMove.forward = Math.cos(angle * Math.PI / 180) * distance / 50;
-      joystickMove.right = Math.sin(angle * Math.PI / 180) * distance / 50;
-    });
+  // Stay in bounds
+  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+}
 
-    joystick.on('end', () => {
-      joystickMove.forward = 0;
-      joystickMove.right = 0;
-    });
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Controls
-    const keys = {};
-    document.addEventListener('keydown', e => keys[e.code] = true);
-    document.addEventListener('keyup', e => keys[e.code] = false);
+  // Draw player
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+}
 
-    // Animation
-    let prevTime = performance.now();
-    function animate() {
-      requestAnimationFrame(animate);
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
 
-      const time = performance.now();
-      const delta = (time - prevTime) / 1000;
+loop();
+</script>
 
-      velocity.x -= velocity.x * 10.0 * delta;
-      velocity.z -= velocity.z * 10.0 * delta;
-      velocity.y -= 9.8 * delta; // gravity
-
-      direction.z = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0) + joystickMove.forward;
-      direction.x = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joystickMove.right;
-      direction.normalize();
-
-      if (direction.length() > 0) {
-        velocity.z -= direction.z * 50.0 * delta;
-        velocity.x -= direction.x * 50.0 * delta;
-      }
-
-      controls.moveRight(-velocity.x * delta);
-      controls.moveForward(-velocity.z * delta);
-      controls.getObject().position.y += velocity.y * delta;
-
-      if (controls.getObject().position.y < 2) {
-        velocity.y = 0;
-        controls.getObject().position.y = 2;
-        canJump = true;
-      }
-
-      // Bullets update
-      bullets.forEach((b, i) => {
-        b.mesh.position.add(b.velocity.clone().multiplyScalar(delta * 30));
-        if (b.mesh.position.length() > 500) {
-          scene.remove(b.mesh);
-          bullets.splice(i, 1);
-        }
-      });
-
-      renderer.render(scene, camera);
-      prevTime = time;
-    }
-    animate();
-
-    // Resize
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
 </body>
 </html>
