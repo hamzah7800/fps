@@ -20,15 +20,6 @@
     -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
     touch-action: none; /* Disable browser touch actions for nipple.js */
   }
-  #instructions {
-    position: absolute; width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    background-color: rgba(0,0,0,0.75); color: #fff;
-    font-size: 20px; cursor: pointer; user-select: none; z-index: 10;
-    text-align: center;
-    padding: 20px;
-    box-sizing: border-box;
-  }
   #healthBarContainer {
     position: absolute;
     top: 20px;
@@ -233,12 +224,6 @@
 </style>
 </head>
 <body>
-<div id="instructions">
-    Click to play (WASD to move, mouse to look, Space to jump, <br>
-    Left-click to shoot, Right-click to build, Middle-click to delete, <br>
-    Scroll to switch item)
-</div>
-
 <div id="healthBarContainer"><div id="healthBar"></div></div>
 <div id="deathOverlay"></div>
 <div id="deathText">You Died</div>
@@ -419,17 +404,8 @@
         controls = new THREE.PointerLockControls(camera, document.body);
         scene.add(controls.getObject());
 
-        const instructions = document.getElementById('instructions');
-        instructions.addEventListener('click', () => controls.lock());
-
-        controls.addEventListener('lock', () => {
-          instructions.style.display = 'none';
-          if (isDead) resetGame();
-        });
-
-        controls.addEventListener('unlock', () => {
-          instructions.style.display = '';
-        });
+        // Lock controls immediately to start the game
+        controls.lock();
 
         // Player spawns slightly above the flat terrain (Y=0)
         controls.getObject().position.set(0, 1.8, 0); // Player height 1.8 above Y=0
