@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>FPS Game</title>
 <style>
   body {
@@ -17,12 +18,16 @@
     -ms-user-select: none;       /* Internet Explorer/Edge */
     user-select: none;           /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
     -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+    touch-action: none; /* Disable browser touch actions for nipple.js */
   }
   #instructions {
     position: absolute; width: 100%; height: 100%;
     display: flex; align-items: center; justify-content: center;
     background-color: rgba(0,0,0,0.75); color: #fff;
     font-size: 20px; cursor: pointer; user-select: none; z-index: 10;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
   }
   #healthBarContainer {
     position: absolute;
@@ -142,6 +147,89 @@
     opacity: 0; /* Fade out */
     transition: opacity 0.5s ease-in, background-color 0.5s ease-in; /* Slower fade out */
   }
+  
+  /* Touch Controls */
+  #joystickLeft {
+    position: absolute;
+    bottom: 100px;
+    left: 50px;
+    width: 100px;
+    height: 100px;
+    z-index: 30;
+    opacity: 0.7;
+  }
+  
+  #joystickRight {
+    position: absolute;
+    bottom: 100px;
+    right: 50px;
+    width: 100px;
+    height: 100px;
+    z-index: 30;
+    opacity: 0.7;
+  }
+  
+  #jumpButton {
+    position: absolute;
+    bottom: 220px;
+    right: 50px;
+    width: 80px;
+    height: 80px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+    z-index: 30;
+    opacity: 0.7;
+    user-select: none;
+  }
+  
+  #shootButton {
+    position: absolute;
+    bottom: 220px;
+    right: 150px;
+    width: 80px;
+    height: 80px;
+    background: rgba(255,0,0,0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+    z-index: 30;
+    opacity: 0.7;
+    user-select: none;
+  }
+  
+  @media (max-width: 768px) {
+    #joystickLeft, #joystickRight {
+      width: 80px;
+      height: 80px;
+      bottom: 80px;
+    }
+    #joystickLeft {
+      left: 30px;
+    }
+    #joystickRight {
+      right: 30px;
+    }
+    #jumpButton, #shootButton {
+      width: 60px;
+      height: 60px;
+      bottom: 160px;
+      font-size: 14px;
+    }
+    #jumpButton {
+      right: 30px;
+    }
+    #shootButton {
+      right: 110px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -157,9 +245,18 @@
 
 <div id="inventoryContainer"></div>
 <div id="messageDisplay"></div>
-<div id="bloodOverlay"></div> <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+<div id="bloodOverlay"></div>
+
+<!-- Touch Controls -->
+<div id="joystickLeft"></div>
+<div id="joystickRight"></div>
+<div id="jumpButton">JUMP</div>
+<div id="shootButton">SHOOT</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/PointerLockControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
 
 <script>
   let camera, scene, renderer, controls;
@@ -216,6 +313,13 @@
 
   // Define block properties (geometry and material)
   const blockTypes = {}; // Initialize empty, will be populated after texture load
+
+  // --- Touch Controls Variables ---
+  let joystickLeft, joystickRight;
+  let lookX = 0, lookY = 0;
+  let moveX = 0, moveY = 0;
+  const lookSensitivity = 0.1;
+  const moveSensitivity = 1.5;
 
   // --- Cloud class definition moved here to ensure it's defined before use ---
   class Cloud {
@@ -363,9 +467,114 @@
         addItemToInventory('wood_block', 3);
         addItemToInventory('dirt_block', 7);
 
+        // --- Initialize Touch Controls ---
+        setupTouchControls();
+
         // --- IMPORTANT: Start the animation loop AFTER all Three.js elements are initialized ---
         animate();
     }); // End of texture loader callback
+  }
+
+  // --- Touch Controls Setup ---
+  function setupTouchControls() {
+    // Left joystick for movement
+    joystickLeft = nipplejs.create({
+      zone: document.getElementById('joystickLeft'),
+      mode: 'static',
+      position: { left: '50%', top: '50%' },
+      color: 'white',
+      size: 80
+    });
+    
+    joystickLeft.on('move', (evt, data) => {
+      moveX = data.vector.x * moveSensitivity;
+      moveY = data.vector.y * moveSensitivity;
+    });
+    
+    joystickLeft.on('end', () => {
+      moveX = 0;
+      moveY = 0;
+    });
+    
+    // Right joystick for looking around
+    joystickRight = nipplejs.create({
+      zone: document.getElementById('joystickRight'),
+      mode: 'static',
+      position: { left: '50%', top: '50%' },
+      color: 'white',
+      size: 80
+    });
+    
+    joystickRight.on('move', (evt, data) => {
+      lookX = data.vector.x * lookSensitivity;
+      lookY = data.vector.y * lookSensitivity;
+    });
+    
+    joystickRight.on('end', () => {
+      lookX = 0;
+      lookY = 0;
+    });
+    
+    // Jump button
+    const jumpButton = document.getElementById('jumpButton');
+    jumpButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (canJump && controls.isLocked && !isDead) {
+        velocity.y = 10;
+        canJump = false;
+      }
+    });
+    
+    // Shoot button
+    const shootButton = document.getElementById('shootButton');
+    shootButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (controls.isLocked && !isDead) {
+        shootBullet();
+      }
+    });
+    
+    // For building/deleting on touch devices, we'll need to add some UI
+    // But for now, we'll just use long press on shoot button for building
+    let buildTimeout;
+    shootButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      buildTimeout = setTimeout(() => {
+        if (controls.isLocked && !isDead) {
+          placeBlock();
+        }
+      }, 500); // Long press for 500ms to build
+    });
+    
+    shootButton.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      clearTimeout(buildTimeout);
+    });
+    
+    // Show/hide touch controls based on device
+    function updateControlVisibility() {
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints;
+      const leftJoystick = document.getElementById('joystickLeft');
+      const rightJoystick = document.getElementById('joystickRight');
+      const jumpBtn = document.getElementById('jumpButton');
+      const shootBtn = document.getElementById('shootButton');
+      
+      if (isTouchDevice) {
+        leftJoystick.style.display = 'block';
+        rightJoystick.style.display = 'block';
+        jumpBtn.style.display = 'flex';
+        shootBtn.style.display = 'flex';
+      } else {
+        leftJoystick.style.display = 'none';
+        rightJoystick.style.display = 'none';
+        jumpBtn.style.display = 'none';
+        shootBtn.style.display = 'none';
+      }
+    }
+    
+    // Initial update and on resize
+    updateControlVisibility();
+    window.addEventListener('resize', updateControlVisibility);
   }
 
   // --- Cloud Generation ---
@@ -827,6 +1036,33 @@
       // Apply damping to current velocity
       velocity.x *= dampingFactor;
       velocity.z *= dampingFactor;
+
+      // --- Handle touch controls for looking ---
+      if (Math.abs(lookX) > 0.1 || Math.abs(lookY) > 0.1) {
+        // Rotate camera based on joystick input
+        controls.getObject().rotation.y -= lookX * 0.02;
+        camera.rotation.x -= lookY * 0.02;
+        
+        // Clamp vertical look to prevent over-rotation
+        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+      }
+
+      // --- Handle touch controls for movement ---
+      if (Math.abs(moveX) > 0.1 || Math.abs(moveY) > 0.1) {
+        // Convert joystick input to movement direction
+        const angle = Math.atan2(moveX, moveY);
+        const moveForwardTouch = Math.cos(angle) * Math.sqrt(moveX * moveX + moveY * moveY);
+        const moveRightTouch = Math.sin(angle) * Math.sqrt(moveX * moveX + moveY * moveY);
+        
+        // Set movement flags based on joystick input
+        moveForward = moveForwardTouch > 0.5;
+        moveBackward = moveForwardTouch < -0.5;
+        moveLeft = moveRightTouch < -0.5;
+        moveRight = moveRightTouch > 0.5;
+      } else {
+        // Reset movement if joystick is centered
+        moveForward = moveBackward = moveLeft = moveRight = false;
+      }
 
       // --- Calculate horizontal movement based on camera's *horizontal* direction ---
       const forwardDirection = new THREE.Vector3();
